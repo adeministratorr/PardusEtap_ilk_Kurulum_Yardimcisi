@@ -1,0 +1,1 @@
+# PardusEtap_ilk_Kurulum_Yardimcisi
