@@ -485,5 +485,3 @@ Bu repoya GitHub tarafında hazırlanan dosyalar:
 - Varsayılan değer değiştiğinde
 - Yeni `.desktop` dosyası veya GUI akışı geldiğinde
 - Yeni paket, servis ya da geri dönüş mekanizması eklendiğinde
-
-Bu sayede GitHub sayfası kısa kalır, ayrıntılı kullanım bilgisi ise tek bir kılavuzda toplanır.
