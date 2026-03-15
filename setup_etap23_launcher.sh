@@ -139,6 +139,34 @@ run_main() {
   run_with_status "${MAIN_SCRIPT}" "$@"
 }
 
+# shellcheck disable=SC2329
+run_command_with_tty_input() {
+  local status
+
+  exec 3<"${TTY_DEVICE}"
+  set +e
+  "$@" <&3
+  status=$?
+  set -e
+  exec 3<&-
+
+  return "${status}"
+}
+
+# shellcheck disable=SC2329
+run_command_with_tty_io() {
+  local status
+
+  exec 3<>"${TTY_DEVICE}"
+  set +e
+  "$@" <&3 >&3 2>&1
+  status=$?
+  set -e
+  exec 3>&-
+
+  return "${status}"
+}
+
 load_launcher_state() {
   [[ -r "${ETAP23_STATE_FILE}" ]] || return 0
 
@@ -165,13 +193,7 @@ EOF
   chmod 600 "${ETAP23_STATE_FILE}" 2>/dev/null || true
 }
 
-try_sudo_password() {
-  local candidate="$1"
-
-  [[ -n "${candidate}" ]] || return 1
-  printf '%s\n' "${candidate}" | sudo -S -k -p '' true >/dev/null 2>&1
-}
-
+# shellcheck disable=SC2329
 run_main_with_sudo_password() {
   local candidate="$1"
   local status
@@ -188,9 +210,9 @@ run_main_with_sudo_password() {
   fi
 
   if has_tty; then
-    printf '%s\n' "${candidate}" | sudo -S -k -p '' env \
+    printf '%s\n' "${candidate}" | run_command_with_tty_io sudo -S -k -p '' env \
       "${GUI_ENV_ARGS[@]}" \
-      "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" >"${TTY_DEVICE}" 2>&1
+      "${MAIN_SCRIPT}" "${GUI_ARGS[@]}"
   else
     printf '%s\n' "${candidate}" | sudo -S -k -p '' env \
       "${GUI_ENV_ARGS[@]}" \
@@ -198,14 +220,17 @@ run_main_with_sudo_password() {
   fi
 }
 
+# shellcheck disable=SC2329
 run_main_with_sudo_password_capture() {
   local candidate="$1"
   local output_file="$2"
 
   [[ -n "${candidate}" ]] || return 1
-  printf '%s\n' "${candidate}" | sudo -S -k -p '' env \
+  {
+    printf '%s\n' "${candidate}" | sudo -S -k -p '' env \
     "${GUI_ENV_ARGS[@]}" \
-    "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" >"${output_file}" 2>&1
+      "${MAIN_SCRIPT}" "${GUI_ARGS[@]}"
+  } >"${output_file}" 2>&1
 }
 
 get_gui_session_type() {
@@ -273,15 +298,16 @@ build_gui_env_args() {
   fi
 }
 
+# shellcheck disable=SC2329
 run_main_with_sudo_prompt() {
   local status
 
   if [[ -n "${RUN_REPORT_FILE}" ]]; then
     set +e
     if has_tty; then
-      sudo -k -p '[sudo] Yonetici parolasi: ' env \
+      run_command_with_tty_input sudo -k -p '[sudo] Yonetici parolasi: ' env \
         "${GUI_ENV_ARGS[@]}" \
-        "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" <"${TTY_DEVICE}" 2>&1 | tee -a "${RUN_REPORT_FILE}"
+        "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" 2>&1 | tee -a "${RUN_REPORT_FILE}"
     else
       sudo -k -p '[sudo] Yonetici parolasi: ' env \
         "${GUI_ENV_ARGS[@]}" \
@@ -293,9 +319,9 @@ run_main_with_sudo_prompt() {
   fi
 
   if has_tty; then
-    sudo -k -p '[sudo] Yonetici parolasi: ' env \
+    run_command_with_tty_io sudo -k -p '[sudo] Yonetici parolasi: ' env \
       "${GUI_ENV_ARGS[@]}" \
-      "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" <"${TTY_DEVICE}" >"${TTY_DEVICE}" 2>&1
+      "${MAIN_SCRIPT}" "${GUI_ARGS[@]}"
   else
     sudo -k -p '[sudo] Yonetici parolasi: ' env \
       "${GUI_ENV_ARGS[@]}" \
@@ -362,17 +388,22 @@ run_main_capture_output() {
   run_with_status "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" >"${output_file}" 2>&1
 }
 
+# shellcheck disable=SC2329
 run_main_with_sudo_prompt_capture() {
   local output_file="$1"
 
   if has_tty; then
-    sudo -k -p '[sudo] Yonetici parolasi: ' env \
-      "${GUI_ENV_ARGS[@]}" \
-      "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" <"${TTY_DEVICE}" >"${output_file}" 2>&1
+    {
+      run_command_with_tty_input sudo -k -p '[sudo] Yonetici parolasi: ' env \
+        "${GUI_ENV_ARGS[@]}" \
+        "${MAIN_SCRIPT}" "${GUI_ARGS[@]}"
+    } >"${output_file}" 2>&1
   else
-    sudo -k -p '[sudo] Yonetici parolasi: ' env \
-      "${GUI_ENV_ARGS[@]}" \
-      "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" >"${output_file}" 2>&1
+    {
+      sudo -k -p '[sudo] Yonetici parolasi: ' env \
+        "${GUI_ENV_ARGS[@]}" \
+        "${MAIN_SCRIPT}" "${GUI_ARGS[@]}"
+    } >"${output_file}" 2>&1
   fi
 }
 
@@ -607,7 +638,7 @@ set_first_install_checklist_states() {
   local index
 
   for index in "${!FIRST_INSTALL_CHECKLIST_STATES[@]}"; do
-    FIRST_INSTALL_CHECKLIST_STATES[$index]="${state}"
+    FIRST_INSTALL_CHECKLIST_STATES[index]="${state}"
   done
 }
 
@@ -616,11 +647,11 @@ sync_first_install_checklist_states_from_choices() {
 
   for index in "${!FIRST_INSTALL_CHECKLIST_CODES[@]}"; do
     code="${FIRST_INSTALL_CHECKLIST_CODES[$index]}"
-    FIRST_INSTALL_CHECKLIST_STATES[$index]="FALSE"
+    FIRST_INSTALL_CHECKLIST_STATES[index]="FALSE"
 
     for selected in "${CHOICES[@]:-}"; do
       if [[ "${selected}" == "${code}" ]]; then
-        FIRST_INSTALL_CHECKLIST_STATES[$index]="TRUE"
+        FIRST_INSTALL_CHECKLIST_STATES[index]="TRUE"
         break
       fi
     done
