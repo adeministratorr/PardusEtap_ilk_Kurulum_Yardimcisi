@@ -130,4 +130,3 @@ Bu repo GitHub kullanımına hazır hale getirmek için aşağıdaki dosyalar ek
 - `ETA Kayıt` otomasyonu uygulamanın gerçek arayüzüne bağlıdır; otomasyon tamamlanamazsa işlemi elle bitirebilirsiniz.
 - Dokunmatik kalibrasyon araci su an X11 oturumunu hedefler; Wayland oturumunda durumu gosterir ama kalibrasyonu baslatmaz.
 - Boşta kapanma seçeneği açıkken kurulum, mevcut grafik oturum için izleyiciyi hemen başlatmayı da dener; sonraki oturumlarda `/etc/xdg/autostart/etap-idle-session-monitor.desktop` üzerinden otomatik devreye girer.
-- Bu klasör şu anda bir Git deposu değilse, GitHub'a göndermeden önce `git init` ile repo oluşturmanız ve uzak depo bağlamanız gerekir.
