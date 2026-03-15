@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ETA Dokunmatik Kalibrasyon Araci
+Comment=Dokunmatigi yeniden kalibre et, durumu kontrol et veya kayitli kalibrasyonu sifirla
+Exec=/bin/sh -c "desktop_file=\$1; script_dir=\$(CDPATH= cd -- \"\$(dirname -- \"\$desktop_file\")\" && pwd); script=\"\$script_dir/dokunmatik_kalibrasyon.sh\"; if [ ! -x \"\$script\" ]; then printf 'HATA: Betik bulunamadi: %s\n' \"\$script\"; printf 'Pencereyi kapatmadan once Enter tusuna basin...'; read -r _; exit 1; fi; ETAP23_RUNTIME_DIR=\"\$script_dir\" exec \"\$script\" --gui" sh %k
+Icon=preferences-desktop-peripherals
+Terminal=true
+StartupNotify=true
+Categories=System;Settings;

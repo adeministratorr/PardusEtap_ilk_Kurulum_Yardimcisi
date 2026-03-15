@@ -1,0 +1,41 @@
+name: Özellik isteği
+description: Yeni bir yetenek, iş akışı veya dokümantasyon iyileştirmesi öneriniz varsa kullanın.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Hangi problemi çözmeye çalışıyorsunuz?
+      placeholder: Yeni tahta kurulumlarında aynı parametreleri tekrar girmek zorunda kalıyoruz.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Önerilen çözüm
+      placeholder: Hazır profil dosyasından ayar okuyan bir mod eklenebilir.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Diğer düşündüğünüz yaklaşımlar
+  - type: textarea
+    id: impact
+    attributes:
+      label: Beklenen etki
+      description: Bu değişiklik öğretmenler veya Yeğitek Okul Sorumluları için hangi faydayı sağlar?
+      placeholder: Kurulum süresini kısaltır ve adım atlama riskini azaltır.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Ön kontrol
+      options:
+        - label: Benzer istekleri kontrol ettim
+          required: false
+        - label: Dokümantasyon veya CLI değişikliği gerekiyorsa aynı PR'da güncellenmesini bekliyorum
+          required: false

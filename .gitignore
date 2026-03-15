@@ -1,0 +1,12 @@
+.DS_Store
+.idea/
+.vscode/
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+wordpress_makale_etap23_pardus_ai_seo.md

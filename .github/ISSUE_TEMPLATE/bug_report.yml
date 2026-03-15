@@ -1,0 +1,89 @@
+name: Hata bildirimi
+description: Kurulum, bakım, sürücü, Wine veya ETA Kayıt akışlarındaki hataları bildirin.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Lütfen hassas verileri gizleyin. Parola, kurum kodu, cihaz seri numarası veya yerel ağ ayrıntılarını olduğu gibi eklemeyin.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Özet
+      description: Sorun nedir?
+      placeholder: Dokunmatik sürücü güncellemesinden sonra servis pasif kalıyor.
+    validations:
+      required: true
+  - type: dropdown
+    id: flow
+    attributes:
+      label: Kullanılan akış
+      options:
+        - setup_etap23.sh
+        - setup_etap23_launcher.sh
+        - ahenk_kaldir.sh
+        - wine_araci.sh
+        - ETAP23 Ilk Kurulum.desktop
+        - ETAP Wine Araci.desktop
+        - ETA Dokunmatik Surucu Araci.desktop
+        - ETA Kayit Duzelt Sifirla.desktop
+        - Diğer
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Kullanılan komut veya adım
+      description: Terminal komutu ya da tıklanan GUI seçeneği
+      placeholder: sudo ./setup_etap23.sh --touchdrv-only-upgrade
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Cihaz ve sürüm bilgisi
+      description: Mümkünse cihaz modeli ve Pardus/ETAP23 sürümü
+      placeholder: ETAP23 / Pardus 23.x
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Tekrar adımları
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Beklenen davranış
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Gerçekleşen davranış
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Hata çıktı özeti
+      description: Terminal veya log özetini paylaşın. Hassas verileri maskeleyin.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Ön kontrol
+      options:
+        - label: Hassas verileri temizledim
+          required: true
+        - label: README ve kullanım kılavuzunu kontrol ettim
+          required: false
+        - label: Daha önce benzer bir issue olup olmadığına baktım
+          required: false

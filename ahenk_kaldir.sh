@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MAIN_SCRIPT="${SCRIPT_DIR}/setup_etap23.sh"
+LAUNCHER_SCRIPT="${SCRIPT_DIR}/setup_etap23_launcher.sh"
+ETAP23_RUNTIME_DIR="${ETAP23_RUNTIME_DIR:-${SCRIPT_DIR}}"
+export ETAP23_RUNTIME_DIR
+
+REINSTALL_AHENK=0
+SKIP_APT_UPDATE=0
+GUI_MODE=0
+
+usage() {
+  cat <<'EOF'
+Kullanim:
+  sudo ./ahenk_kaldir.sh
+  sudo ./ahenk_kaldir.sh --reinstall-ahenk
+  sudo ./ahenk_kaldir.sh --skip-apt-update
+  ./ahenk_kaldir.sh --gui
+
+Bu sarmalayici, islemi setup_etap23.sh icindeki merkezi bakim moduna yonlendirir.
+
+Secenekler:
+  --reinstall-ahenk   Temizlikten sonra ahenk paketini yeniden kur
+  --skip-apt-update   apt-get update adimini atla
+  --gui               Grafik arayuz ile ETA Kayit duzelt/sifirla akisini ac
+  -h, --help          Bu yardimi goster
+EOF
+}
+
+fail() {
+  printf 'HATA: %s\n' "$*" >&2
+  exit 1
+}
+
+parse_args() {
+  while (($#)); do
+    case "$1" in
+      --reinstall-ahenk)
+        REINSTALL_AHENK=1
+        ;;
+      --skip-apt-update)
+        SKIP_APT_UPDATE=1
+        ;;
+      --gui)
+        GUI_MODE=1
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        fail "Bilinmeyen parametre: $1"
+        ;;
+    esac
+    shift
+  done
+}
+
+main() {
+  local forwarded_args=()
+
+  parse_args "$@"
+  [[ -x "${MAIN_SCRIPT}" ]] || fail "Ana betik bulunamadi veya calistirilabilir degil: ${MAIN_SCRIPT}"
+
+  if ((GUI_MODE)); then
+    [[ -x "${LAUNCHER_SCRIPT}" ]] || fail "Baslatici bulunamadi veya calistirilabilir degil: ${LAUNCHER_SCRIPT}"
+    exec "${LAUNCHER_SCRIPT}" --eta-kayit-repair-gui
+  fi
+
+  if ((SKIP_APT_UPDATE)); then
+    forwarded_args+=(--skip-apt-update)
+  fi
+
+  if ((REINSTALL_AHENK)); then
+    forwarded_args+=(--eta-kayit-repair-reinstall-ahenk)
+  else
+    forwarded_args+=(--eta-kayit-repair)
+  fi
+
+  if [[ "${EUID}" -ne 0 ]]; then
+    [[ -x "${LAUNCHER_SCRIPT}" ]] || fail "Baslatici bulunamadi veya calistirilabilir degil: ${LAUNCHER_SCRIPT}"
+    exec "${LAUNCHER_SCRIPT}" "${forwarded_args[@]}"
+  fi
+
+  exec "${MAIN_SCRIPT}" "${forwarded_args[@]}"
+}
+
+main "$@"

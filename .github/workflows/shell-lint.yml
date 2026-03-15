@@ -1,0 +1,38 @@
+name: Shell Lint
+
+on:
+  push:
+    paths:
+      - "*.sh"
+      - "*.desktop"
+      - "README.md"
+      - "docs/**"
+      - ".github/**"
+  pull_request:
+    paths:
+      - "*.sh"
+      - "*.desktop"
+      - "README.md"
+      - "docs/**"
+      - ".github/**"
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          while IFS= read -r file; do
+            shellcheck -x "${file}"
+            bash -n "${file}"
+          done < <(find . -maxdepth 1 -type f -name "*.sh" | sort)
+
