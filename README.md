@@ -10,6 +10,7 @@ Projede şu temel yetenekler bulunur:
 
 - Etkileşimli ilk kurulum sihirbazı
 - `zenity` destekli grafik başlatıcı
+- İlk kurulum içinde isteğe bağlı sistem paket güncellemesi
 - Dokunmatik sürücü kurma, güncelleme, kontrol ve geri yükleme akışları
 - Ayrı dokunmatik kalibrasyon aracı
 - ETA Kayıt ve Ahenk temizleme/onarma akışları
@@ -42,7 +43,9 @@ sudo ./setup_etap23.sh
 ```
 
 Grafik akışı tercih ediyorsanız `ETAP23 Ilk Kurulum.desktop` dosyasını çift tıklayın. `zenity` yoksa başlatıcı terminal moduna geri düşer. İlk ekrandaki checkbox listesinden `Tumunu Sec` ve `Tumunu Kaldir` butonlarıyla tüm adımları tek seferde işaretleyebilir veya temizleyebilirsiniz.
+İlk kurulum listesinde ayrıca `Kurulu sistem paketlerini guncelle (apt update + apt upgrade)` ve varsayılan olarak seçili olmayan `Dokunmatik surucusunu guncellemeyi engelle (paket guncellemede de)` seçenekleri bulunur.
 İlk kurulum GUI'sindeki `Mevcut Yonetici Parolasi` alanı `sudo` yetkisini otomatik alabilmek için kullanılabilir. Boş bırakırsanız başlatıcı önce kayıtlı parolayı, yoksa varsayılan `etap+pardus!` değerini dener. `etapadmin` alanları boş bırakılırsa başlatıcı önce yerelde kayıtlı `etapadmin` parolasını, sonra ortamdan verilen `ETAPADMIN_PASSWORD_DEFAULT` değerini dener; ikisi de yoksa parola adımını uyarı vererek atlar. GUI, `etapadmin` parolasını ekranda göstermez. Metin kutusuna yeni parola yazılırsa bu değer yerelde saklanır.
+Kurulum sonunda ETA Kayit acilacaksa betik once `eta-register` paketini kurar veya gunceller, sonra uygulamayi baslatir.
 
 Yalnızca Wine ile ilgili işlemler için `ETAP Wine Araci.desktop` kısayolunu veya `./wine_araci.sh --gui` komutunu kullanabilirsiniz.
 Dokunmatik hizasi kaymissa `ETA Dokunmatik Kalibrasyon Araci.desktop` kisayolunu veya `./dokunmatik_kalibrasyon.sh --gui` komutunu kullanabilirsiniz.
@@ -51,6 +54,7 @@ Dokunmatik hizasi kaymissa `ETA Dokunmatik Kalibrasyon Araci.desktop` kisayolunu
 
 ```bash
 sudo ./setup_etap23.sh --non-interactive --board-name etap-tahta-01
+sudo ./setup_etap23.sh --upgrade-packages
 sudo ./setup_etap23.sh --touchdrv-upgrade
 sudo ./setup_etap23.sh --touchdrv-only-upgrade
 sudo ./setup_etap23.sh --touchdrv-check
@@ -62,14 +66,21 @@ sudo ./setup_etap23.sh --wine-install
 sudo ./setup_etap23.sh --wine-check
 sudo ./setup_etap23.sh --winecfg
 sudo ./setup_etap23.sh --eta-kayit-repair
+sudo ./setup_etap23.sh --eta-kayit-repair-full-upgrade
 sudo ./wine_araci.sh --install-vulkan
 sudo ./wine_araci.sh --rebuild-prefix --wine-user etapadmin
 sudo ./ahenk_kaldir.sh --reinstall-ahenk
+sudo ./ahenk_kaldir.sh --full-upgrade
 ```
 
 - `--touchdrv-check` ve grafik dokunmatik araci, kontrol sonunda kurulu surumu, `systemctl status eta-touchdrv` icindeki servis durumunu ve oneriyi ayri bir ozet olarak gosterir.
+- İlk kurulum ekranindaki `Kurulu sistem paketlerini guncelle` secenegi, önce `apt-get update`, sonra `apt-get upgrade -y` calistirir.
+- `Dokunmatik surucusunu guncellemeyi engelle` secenegi aciksa, genel paket guncellemesinde de `eta-touchdrv` gecici hold ile atlanir.
+- İlk kurulum sonunda ETA Kayit acilacaksa betik acilistan hemen once `eta-register` paketini kurar veya gunceller; guncelleme basarisiz olsa bile paket zaten kuruluysa mevcut surum ile devam eder.
+- Wine bootstrap adimlari sabit bir zaman asimi olmadan calisir; yavas cihazlarda kurulum uzun sure aynı adımda kalabilir.
 - `dokunmatik_kalibrasyon.sh` ve `ETA Dokunmatik Kalibrasyon Araci.desktop`, kalibrasyonu surucu guncellemesinden ayri bir arac olarak acar; kaydedilen matris sonraki X11 oturumlarinda otomatik uygulanir.
 - `--eta-kayit-repair` ve `ahenk_kaldir.sh`, `apt purge ahenk` adimi `/usr/share/ahenk` veya `/etc/ahenk` gibi bosalmayan kalinti klasorler yuzunden hata verirse bu klasorleri temizleyip purge islemini otomatik tekrar dener; purge basarili olsa bile kalinti klasorleri sonda tekrar temizler.
+- `--eta-kayit-repair-full-upgrade` ve `ahenk_kaldir.sh --full-upgrade`, standart ETA Kayit onarimina ek olarak `ahenk` paketini yeniden kurar ve son care olarak `apt-get dist-upgrade -y` calistirir.
 - Betik baslarken `depo.etap.org.tr/deneysel` girdilerini gecici olarak pasife alir; cikarken bunlari yedekten yeniden etkinlestirir.
 - `apt-get update` sirasinda deneysel depo yine sorun cikarirsa betik yedekli geri kazanım yolunu da kullanir.
 - Boşta kapanma artık grafik oturumunda çalışan bir izleyici ile izlenir; root tarafta yalnızca kapatma kararı verilir. Bu yüzden ETAP/Cinnamon oturumunda daha kararlı çalışır.

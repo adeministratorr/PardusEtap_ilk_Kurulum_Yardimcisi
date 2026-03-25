@@ -62,6 +62,9 @@ Bu modda betik adım adım soru sorar. Enter tuşu ile varsayılan seçenek koru
 3. Gerekli seçimleri tamamlayın.
 4. Başlatıcı yetki alıp `setup_etap23.sh` betiğini uygun argümanlarla çalıştırır.
 
+İlk kurulum seçim listesinde `Kurulu sistem paketlerini guncelle (apt update + apt upgrade)` ve varsayılan olarak seçili olmayan `Dokunmatik surucusunu guncellemeyi engelle (paket guncellemede de)` seçenekleri de yer alır.
+Kurulum sonunda ETA Kayit acilacaksa betik uygulamayi baslatmadan hemen once `eta-register` paketini kurar veya gunceller.
+
 ### 5.3 Etkileşimsiz kurulum
 
 ```bash
@@ -151,11 +154,13 @@ sudo ./setup_etap23.sh --touchdrv-upgrade
 sudo ./setup_etap23.sh --touchdrv-only-upgrade
 sudo ./setup_etap23.sh --touchdrv-check
 sudo ./setup_etap23.sh --touchdrv-rollback
+sudo ./setup_etap23.sh --upgrade-packages
 sudo ./setup_etap23.sh --wine-install
 sudo ./setup_etap23.sh --wine-check
 sudo ./setup_etap23.sh --winecfg
 sudo ./setup_etap23.sh --eta-kayit-repair
 sudo ./setup_etap23.sh --eta-kayit-repair-reinstall-ahenk
+sudo ./setup_etap23.sh --eta-kayit-repair-full-upgrade
 sudo ./wine_araci.sh --install
 sudo ./wine_araci.sh --install-vulkan
 sudo ./wine_araci.sh --check
@@ -165,6 +170,7 @@ sudo ./wine_araci.sh --rebuild-prefix --wine-user etapadmin
 sudo ./wine_araci.sh --remove-purge-prefixes
 sudo ./ahenk_kaldir.sh
 sudo ./ahenk_kaldir.sh --reinstall-ahenk
+sudo ./ahenk_kaldir.sh --full-upgrade
 ./ahenk_kaldir.sh --gui
 ```
 
@@ -188,6 +194,7 @@ sudo ./ahenk_kaldir.sh --reinstall-ahenk
 | `--touchdrv-rollback` | `eta-touchdrv=0.3.5` sürümüne geri döner |
 | `--eta-kayit-repair` | ETA Kayıt/Ahenk temizliği yapar |
 | `--eta-kayit-repair-reinstall-ahenk` | Temizlikten sonra `ahenk` paketini tekrar kurar |
+| `--eta-kayit-repair-full-upgrade` | Temizlikten sonra `ahenk` paketini tekrar kurar ve son çare olarak tüm paketleri günceller |
 
 ### 8.4 Ana kurulum seçenekleri
 
@@ -200,6 +207,7 @@ sudo ./ahenk_kaldir.sh --reinstall-ahenk
 | `--remove-ogretmen` / `--keep-ogretmen` | `ogretmen` kullanıcısını sil veya koru |
 | `--install-eag-client` / `--skip-eag-client` | Yerel `e-ag-client` paketini kur veya atla |
 | `--install-eta-qr-login` / `--skip-eta-qr-login` | `eta-qr-login` adımını aç/kapat |
+| `--upgrade-packages` / `--skip-upgrade-packages` | Önce paket listesini yenile, sonra kurulu sistem paketlerini güncelle veya atla |
 | `--install-eta-touchdrv` / `--skip-eta-touchdrv` | Dokunmatik sürücü adımını aç/kapat |
 | `--install-wine` / `--skip-wine` | Wine ve winetricks adımını aç/kapat |
 | `--disable-screensaver` / `--keep-screensaver` | Ekran koruyucu ve DPMS ayarını değiştir veya koru |

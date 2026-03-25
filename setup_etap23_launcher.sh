@@ -55,8 +55,42 @@ run_with_status() {
   return "${status}"
 }
 
+selected_args_benefit_from_after_1600_notice() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --upgrade-packages|--install-wine|--wine-install)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+show_after_1600_notice_if_needed() {
+  local current_hour notice_text
+
+  selected_args_benefit_from_after_1600_notice || return 0
+  current_hour="$(date '+%H' 2>/dev/null || printf '99')"
+  [[ "${current_hour}" =~ ^[0-9]+$ ]] || return 0
+  ((10#${current_hour} < 16)) || return 0
+
+  notice_text="Wine ve sistem guncelleme kurulumlari saat 16:00'dan sonra genellikle daha hizli tamamlandigindan, bu islemleri mumkunse 16:00'dan sonra baslatmaniz daha uygun olacaktir."
+
+  if launcher_can_use_zenity; then
+    zenity --info \
+      --title="Kurulum Zamanlamasi" \
+      --width=480 \
+      --text="${notice_text}" || true
+    return 0
+  fi
+
+  print_line "Bilgi: ${notice_text}\n"
+}
+
 prepare_run_report_file() {
-  launcher_can_use_zenity || return 0
   [[ -n "${RUN_REPORT_FILE}" ]] && return 0
 
   RUN_REPORT_FILE="$(mktemp /tmp/etap23-launcher-report.XXXXXX.log)"
@@ -94,10 +128,18 @@ show_error_report_if_available() {
   rm -f "${temp_view}"
 }
 
+run_report_has_user_warning() {
+  [[ -n "${RUN_REPORT_FILE}" && -s "${RUN_REPORT_FILE}" ]] || return 1
+  grep -Eq 'KULLANICI_UYARI:' "${RUN_REPORT_FILE}"
+}
+
 finish_with_status() {
   local status="$1"
 
-  if [[ "${status}" -eq 0 ]]; then
+  if [[ "${status}" -eq 0 ]] && run_report_has_user_warning; then
+    print_line '\nIslem uyari ile tamamlandi.\n'
+    print_line 'Detaylari yukaridaki KULLANICI_UYARI mesajlarinda kontrol edin.\n'
+  elif [[ "${status}" -eq 0 ]]; then
     print_line '\nIslem tamamlandi.\n'
   else
     if has_tty; then
@@ -583,6 +625,17 @@ FIRST_INSTALL_CHECKLIST_CODES=()
 FIRST_INSTALL_CHECKLIST_LABELS=()
 FIRST_INSTALL_CHECKLIST_STATES=()
 
+first_install_checklist_force_disabled_on_select_all() {
+  case "$1" in
+    block_eta_touch)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 init_first_install_checklist() {
   FIRST_INSTALL_CHECKLIST_CODES=(
     hostname
@@ -590,7 +643,8 @@ init_first_install_checklist() {
     remove_ogretmen
     eag
     eta_qr
-    eta_touch
+    upgrade_packages
+    block_eta_touch
     wine
     wine_vulkan
     screensaver
@@ -606,7 +660,8 @@ init_first_install_checklist() {
     "ogretmen kullanicisini sil"
     "e-ag-client paketini kur"
     "eta-qr-login paketini kur"
-    "eta-touchdrv paketini kur veya guncelle"
+    "Kurulu sistem paketlerini guncelle (apt update + apt upgrade)"
+    "Dokunmatik surucusunu guncellemeyi engelle (paket guncellemede de)"
     "Wine ve winetricks kur"
     "dxvk ve vkd3d kur (Vulkan gerektirir)"
     "Ekran koruyucu ve DPMS'i kapat"
@@ -622,7 +677,8 @@ init_first_install_checklist() {
     TRUE
     TRUE
     TRUE
-    TRUE
+    FALSE
+    FALSE
     TRUE
     FALSE
     TRUE
@@ -635,10 +691,15 @@ init_first_install_checklist() {
 
 set_first_install_checklist_states() {
   local state="$1"
-  local index
+  local index code
 
   for index in "${!FIRST_INSTALL_CHECKLIST_STATES[@]}"; do
-    FIRST_INSTALL_CHECKLIST_STATES[index]="${state}"
+    code="${FIRST_INSTALL_CHECKLIST_CODES[$index]}"
+    if [[ "${state}" == "TRUE" ]] && first_install_checklist_force_disabled_on_select_all "${code}"; then
+      FIRST_INSTALL_CHECKLIST_STATES[index]="FALSE"
+    else
+      FIRST_INSTALL_CHECKLIST_STATES[index]="${state}"
+    fi
   done
 }
 
@@ -854,10 +915,16 @@ collect_gui_args() {
     GUI_ARGS+=(--skip-eta-qr-login)
   fi
 
-  if has_choice eta_touch; then
-    GUI_ARGS+=(--install-eta-touchdrv)
+  if has_choice upgrade_packages; then
+    GUI_ARGS+=(--upgrade-packages)
   else
+    GUI_ARGS+=(--skip-upgrade-packages)
+  fi
+
+  if has_choice block_eta_touch; then
     GUI_ARGS+=(--skip-eta-touchdrv)
+  else
+    GUI_ARGS+=(--install-eta-touchdrv)
   fi
 
   if has_choice wine; then
@@ -1067,14 +1134,15 @@ collect_eta_kayit_repair_gui_args() {
   selection="$(zenity --list \
     --radiolist \
     --title="ETA Kayit duzelt/sifirla" \
-    --text="Ahenk kaydini temizlemek veya temizleyip yeniden kurmak icin islemi secin" \
+    --text="Ahenk onarimi icin islemi secin" \
     --width=780 \
-    --height=320 \
+    --height=360 \
     --column="Sec" \
     --column="Kod" \
     --column="Aciklama" \
-    TRUE eta_kayit_repair "eta-register kur/guncelle, ahenk kaydini temizle" \
-    FALSE eta_kayit_repair_reinstall "Ayni islemi yap ve sonunda ahenk paketini yeniden kur")" || return 1
+    FALSE eta_kayit_repair "Ahenk onar" \
+    FALSE eta_kayit_repair_reinstall "Ahenk onar ve kayit bilesenlerini yeniden kur" \
+    FALSE eta_kayit_repair_full_upgrade "Ahenk onar, kayit bilesenlerini yeniden kur ve son care olarak tum paketleri guncelle")" || return 1
 
   GUI_ARGS=(--non-interactive --pause-on-error)
 
@@ -1084,6 +1152,9 @@ collect_eta_kayit_repair_gui_args() {
       ;;
     eta_kayit_repair_reinstall)
       GUI_ARGS+=(--eta-kayit-repair-reinstall-ahenk)
+      ;;
+    eta_kayit_repair_full_upgrade)
+      GUI_ARGS+=(--eta-kayit-repair-full-upgrade)
       ;;
     *)
       return 1
@@ -1096,11 +1167,11 @@ collect_eta_kayit_repair_cli_args() {
 
   while true; do
     print_line "$(launcher_mode_label)\n"
-    print_line '  1) eta-register kur/guncelle, ahenk kaydini temizle\n'
-    print_line '  2) Ayni islemi yap ve sonunda ahenk paketini yeniden kur\n'
-    print_line 'Seciminiz [1]: '
+    print_line '  1) Ahenk onar\n'
+    print_line '  2) Ahenk onar ve kayit bilesenlerini yeniden kur\n'
+    print_line '  3) Ahenk onar, kayit bilesenlerini yeniden kur ve son care olarak tum paketleri guncelle\n'
+    print_line 'Seciminiz: '
     choice="$(read_line_from_user || true)"
-    choice="${choice:-1}"
 
     GUI_ARGS=(--non-interactive --pause-on-error)
 
@@ -1113,8 +1184,12 @@ collect_eta_kayit_repair_cli_args() {
         GUI_ARGS+=(--eta-kayit-repair-reinstall-ahenk)
         return 0
         ;;
+      3)
+        GUI_ARGS+=(--eta-kayit-repair-full-upgrade)
+        return 0
+        ;;
       *)
-        print_line 'Gecersiz secim. Lutfen 1 veya 2 girin.\n\n'
+        print_line 'Gecersiz secim. Lutfen 1, 2 veya 3 girin.\n\n'
         ;;
     esac
   done
@@ -1525,6 +1600,7 @@ if [[ "${#GUI_ARGS[@]}" -eq 1 && "${GUI_ARGS[0]}" == "--pause-on-error" ]]; then
   fi
 fi
 
+show_after_1600_notice_if_needed
 prepare_touchdrv_summary_file
 prepare_run_report_file
 

@@ -47,6 +47,7 @@ ENABLE_REMOVE_OGRENCI="${ENABLE_REMOVE_OGRENCI:-1}"
 ENABLE_REMOVE_OGRETMEN="${ENABLE_REMOVE_OGRETMEN:-1}"
 ENABLE_EAG_CLIENT="${ENABLE_EAG_CLIENT:-1}"
 ENABLE_ETA_QR_LOGIN="${ENABLE_ETA_QR_LOGIN:-1}"
+ENABLE_PACKAGE_UPGRADE="${ENABLE_PACKAGE_UPGRADE:-0}"
 ENABLE_ETA_TOUCHDRV="${ENABLE_ETA_TOUCHDRV:-1}"
 ENABLE_WINE="${ENABLE_WINE:-1}"
 ENABLE_DISABLE_SCREENSAVER="${ENABLE_DISABLE_SCREENSAVER:-1}"
@@ -100,6 +101,7 @@ Genel secenekler:
   --eta-kayit-repair                ETA Kayit icin eta-register kur/guncelle, ahenk kaydini temizle
   --eta-kayit-repair-reinstall-ahenk
                                     ETA Kayit onarimi yap ve sonunda ahenk paketini yeniden kur
+  --eta-kayit-repair-full-upgrade   ETA Kayit onarimi yap, ahenk paketini yeniden kur ve son care olarak tum paketleri guncelle
   -h, --help                        Bu yardimi goster
 
 Islem secenekleri:
@@ -114,6 +116,8 @@ Islem secenekleri:
   --skip-eag-client                 e-ag-client paketini kurma
   --install-eta-qr-login            eta-qr-login paketini kur
   --skip-eta-qr-login               eta-qr-login paketini kurma
+  --upgrade-packages                Kurulu sistem paketlerini guncelle
+  --skip-upgrade-packages           Kurulu sistem paketlerini guncelleme
   --install-eta-touchdrv            eta-touchdrv paketini kur/guncelle
   --skip-eta-touchdrv               eta-touchdrv adimini atla
   --install-wine                    Wine ve winetricks kurulumunu yap
@@ -179,6 +183,7 @@ Ortam degiskenleri:
   ENABLE_REMOVE_OGRETMEN
   ENABLE_EAG_CLIENT
   ENABLE_ETA_QR_LOGIN
+  ENABLE_PACKAGE_UPGRADE
   ENABLE_ETA_TOUCHDRV
   ENABLE_WINE
   ENABLE_DISABLE_SCREENSAVER
@@ -197,6 +202,10 @@ EOF
 
 log() {
   printf '[%s] %s\n' "$(date '+%F %T')" "$*" >&2
+}
+
+user_warn() {
+  log "KULLANICI_UYARI: $*"
 }
 
 clear_user_summary() {
@@ -541,6 +550,9 @@ parse_args() {
       --eta-kayit-repair-reinstall-ahenk)
         ACTION_MODE=eta-kayit-repair-reinstall-ahenk
         ;;
+      --eta-kayit-repair-full-upgrade)
+        ACTION_MODE=eta-kayit-repair-full-upgrade
+        ;;
       --board-name)
         shift
         [[ $# -gt 0 ]] || fail "--board-name icin deger eksik."
@@ -575,6 +587,12 @@ parse_args() {
         ;;
       --skip-eta-qr-login)
         ENABLE_ETA_QR_LOGIN=0
+        ;;
+      --upgrade-packages)
+        ENABLE_PACKAGE_UPGRADE=1
+        ;;
+      --skip-upgrade-packages)
+        ENABLE_PACKAGE_UPGRADE=0
         ;;
       --install-eta-touchdrv)
         ENABLE_ETA_TOUCHDRV=1
@@ -719,13 +737,14 @@ validate_bool() {
 }
 
 validate_settings() {
-  [[ "${ACTION_MODE}" =~ ^(setup|touchdrv-upgrade|touchdrv-only-upgrade|touchdrv-check|touchdrv-rollback|touch-calibration-start|touch-calibration-status|touch-calibration-reset|wine-install|wine-check|wine-version|winecfg|wine-remove|wine-remove-purge-prefixes|wine-rebuild-prefix|eta-kayit-repair|eta-kayit-repair-reinstall-ahenk)$ ]] || \
-    fail "ACTION_MODE setup, touchdrv-upgrade, touchdrv-only-upgrade, touchdrv-check, touchdrv-rollback, touch-calibration-start, touch-calibration-status, touch-calibration-reset, wine-install, wine-check, wine-version, winecfg, wine-remove, wine-remove-purge-prefixes, wine-rebuild-prefix, eta-kayit-repair veya eta-kayit-repair-reinstall-ahenk olmalidir."
+  [[ "${ACTION_MODE}" =~ ^(setup|touchdrv-upgrade|touchdrv-only-upgrade|touchdrv-check|touchdrv-rollback|touch-calibration-start|touch-calibration-status|touch-calibration-reset|wine-install|wine-check|wine-version|winecfg|wine-remove|wine-remove-purge-prefixes|wine-rebuild-prefix|eta-kayit-repair|eta-kayit-repair-reinstall-ahenk|eta-kayit-repair-full-upgrade)$ ]] || \
+    fail "ACTION_MODE setup, touchdrv-upgrade, touchdrv-only-upgrade, touchdrv-check, touchdrv-rollback, touch-calibration-start, touch-calibration-status, touch-calibration-reset, wine-install, wine-check, wine-version, winecfg, wine-remove, wine-remove-purge-prefixes, wine-rebuild-prefix, eta-kayit-repair, eta-kayit-repair-reinstall-ahenk veya eta-kayit-repair-full-upgrade olmalidir."
   validate_bool "${ENABLE_HOSTNAME_CHANGE}" || fail "ENABLE_HOSTNAME_CHANGE yalnizca 0 veya 1 olabilir."
   validate_bool "${ENABLE_REMOVE_OGRENCI}" || fail "ENABLE_REMOVE_OGRENCI yalnizca 0 veya 1 olabilir."
   validate_bool "${ENABLE_REMOVE_OGRETMEN}" || fail "ENABLE_REMOVE_OGRETMEN yalnizca 0 veya 1 olabilir."
   validate_bool "${ENABLE_EAG_CLIENT}" || fail "ENABLE_EAG_CLIENT yalnizca 0 veya 1 olabilir."
   validate_bool "${ENABLE_ETA_QR_LOGIN}" || fail "ENABLE_ETA_QR_LOGIN yalnizca 0 veya 1 olabilir."
+  validate_bool "${ENABLE_PACKAGE_UPGRADE}" || fail "ENABLE_PACKAGE_UPGRADE yalnizca 0 veya 1 olabilir."
   validate_bool "${ENABLE_ETA_TOUCHDRV}" || fail "ENABLE_ETA_TOUCHDRV yalnizca 0 veya 1 olabilir."
   validate_bool "${ENABLE_WINE}" || fail "ENABLE_WINE yalnizca 0 veya 1 olabilir."
   validate_bool "${ENABLE_DISABLE_SCREENSAVER}" || fail "ENABLE_DISABLE_SCREENSAVER yalnizca 0 veya 1 olabilir."
@@ -804,7 +823,7 @@ ensure_etapadmin_password_step_has_value() {
 }
 
 configure_interactive_choices() {
-  local current_name entered
+  local current_name entered touchdrv_block_default
 
   if ! is_interactive_session; then
     return
@@ -853,10 +872,21 @@ configure_interactive_choices() {
     ENABLE_ETA_QR_LOGIN=0
   fi
 
-  if ask_yes_no "eta-touchdrv paketi kurulsun veya guncellensin mi?" "${ENABLE_ETA_TOUCHDRV}"; then
-    ENABLE_ETA_TOUCHDRV=1
+  if ask_yes_no "Kurulu sistem paketleri guncellensin mi?" "${ENABLE_PACKAGE_UPGRADE}"; then
+    ENABLE_PACKAGE_UPGRADE=1
   else
+    ENABLE_PACKAGE_UPGRADE=0
+  fi
+
+  touchdrv_block_default=0
+  if ! is_enabled "${ENABLE_ETA_TOUCHDRV}"; then
+    touchdrv_block_default=1
+  fi
+
+  if ask_yes_no "Dokunmatik surucusunu guncellemeyi engelle?" "${touchdrv_block_default}"; then
     ENABLE_ETA_TOUCHDRV=0
+  else
+    ENABLE_ETA_TOUCHDRV=1
   fi
 
   if ask_yes_no "Wine kurulumu yapilsin mi?" "${ENABLE_WINE}"; then
@@ -948,6 +978,36 @@ apt_update_once() {
   fi
 }
 
+upgrade_installed_packages() {
+  local upgrade_status=0
+  local touchdrv_temporarily_held=0
+
+  apt_update_once
+  log "Kurulu sistem paketleri guncelleniyor."
+
+  if ! is_enabled "${ENABLE_ETA_TOUCHDRV}" && package_installed eta-touchdrv; then
+    if package_is_held eta-touchdrv; then
+      log "eta-touchdrv zaten hold durumunda; paket guncellemesi sirasinda atlanacak."
+    else
+      log "Dokunmatik surucusu guncellemesi engellendigi icin eta-touchdrv gecici olarak hold yapiliyor."
+      apt-mark hold eta-touchdrv >/dev/null
+      touchdrv_temporarily_held=1
+    fi
+  fi
+
+  set +e
+  DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+  upgrade_status=$?
+  set -e
+
+  if ((touchdrv_temporarily_held == 1)); then
+    log "Gecici eta-touchdrv hold kaldiriliyor."
+    apt-mark unhold eta-touchdrv >/dev/null || true
+  fi
+
+  return "${upgrade_status}"
+}
+
 disable_legacy_etap_deneysel_repo_entries() {
   local sources_file modified=0 backup_file
 
@@ -1034,6 +1094,10 @@ run_apt_update_with_legacy_etap_repo_recovery() {
 
 package_installed() {
   dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q '^install ok installed$'
+}
+
+package_is_held() {
+  apt-mark showhold 2>/dev/null | grep -Fxq "$1"
 }
 
 install_packages_if_missing() {
@@ -1559,16 +1623,21 @@ find_eta_kayit_command() {
 
 patch_eta_kayit_mainwindow_if_needed() {
   local target_file="${ETA_KAYIT_MAINWINDOW_PATH}"
-  local backup_file
+  local backup_file="${target_file}.etap23-orig"
   local patch_status=0
+  local current_marker='patched by setup_etap23.sh: eta-register safe_get guards v3'
 
   [[ -f "${target_file}" ]] || return 0
 
-  if grep -Fq 'patched by setup_etap23.sh: guard non-dict eta-register data rows' "${target_file}" 2>/dev/null; then
+  if grep -Fq "confirm_grid_school_label" "${target_file}" 2>/dev/null; then
+    log "Yeni ETA Kayit arayuzu tespit edildi; legacy safe_get yamasi atlandi: ${target_file}"
     return 0
   fi
 
-  backup_file="${target_file}.etap23-orig"
+  if grep -Fq "${current_marker}" "${target_file}" 2>/dev/null; then
+    return 0
+  fi
+
   if [[ ! -f "${backup_file}" ]]; then
     cp -p "${target_file}" "${backup_file}" || {
       log "UYARI: ETA Kayit MainWindow.py yedegi alinamadi: ${backup_file}"
@@ -1585,27 +1654,84 @@ import sys
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 original = text
-marker = "# patched by setup_etap23.sh: guard non-dict eta-register data rows\n"
+current_marker = "# patched by setup_etap23.sh: eta-register safe_get guards v3\n"
+legacy_markers = (
+    "# patched by setup_etap23.sh: guard non-dict eta-register data rows\n",
+    "# patched by setup_etap23.sh: eta-register safe_get guards v2\n",
+    current_marker,
+)
+helper_name = "_etap23_safe_get"
+top_level_helper_signature = "def _etap23_safe_get("
+class_helper_signature = "    def _etap23_safe_get("
+top_level_helper_block = """
+def _etap23_safe_get(obj, key, default=None):
+    return obj.get(key, default) if isinstance(obj, dict) else default
+"""
+class_helper_block = """
+    def _etap23_safe_get(self, obj, key, default=None):
+        return _etap23_safe_get(obj, key, default)
+"""
+
+for marker in legacy_markers:
+    text = text.replace(marker, "")
+
+if top_level_helper_signature not in text:
+    import_block = re.search(
+        r"(?m)^(?:(?:from\s+\S+\s+import\s+[^\n]+|import\s+[^\n]+)\n)+",
+        text,
+    )
+    if import_block:
+        insert_at = import_block.end()
+        text = text[:insert_at] + "\n" + top_level_helper_block.strip() + "\n\n" + text[insert_at:]
+    else:
+        text = top_level_helper_block.strip() + "\n\n" + text
+
+if class_helper_signature not in text:
+    class_block = re.search(r"(?m)^class\s+MainWindow\s*:\s*\n", text)
+    if class_block:
+        insert_at = class_block.end()
+        text = text[:insert_at] + class_helper_block.strip("\n") + "\n\n" + text[insert_at:]
+
+
+def replace_simple_get(match):
+    return f"{helper_name}({match.group('var')}, {match.group('args')})"
 
 patterns = [
     (
         r'(?m)^(\s*)if\s+([A-Za-z_][A-Za-z0-9_]*)\.get\("([^"]+)"\)\s*==\s*([A-Za-z_][A-Za-z0-9_]*)\s*:',
-        r'\1if isinstance(\2, dict) and \2.get("\3") == \4:',
+        rf'\1if {helper_name}(\2, "\3") == \4:',
     ),
     (
         r"(?m)^(\s*)if\s+([A-Za-z_][A-Za-z0-9_]*)\.get\('([^']+)'\)\s*==\s*([A-Za-z_][A-Za-z0-9_]*)\s*:",
-        r"\1if isinstance(\2, dict) and \2.get('\3') == \4:",
+        rf"\1if {helper_name}(\2, '\3') == \4:",
     ),
 ]
 
 for pattern, replacement in patterns:
     text = re.sub(pattern, replacement, text)
 
+text = re.sub(
+    r"""(?x)
+    \b(?P<var>[A-Za-z_][A-Za-z0-9_]*)\.get\(
+      (?P<args>
+        (?:
+          "(?:[^"\\]|\\.)*"
+          |
+          '(?:[^'\\]|\\.)*'
+        )
+        (?:\s*,\s*[^)]*)?
+      )
+    \)
+    """,
+    replace_simple_get,
+    text,
+)
+
 if text == original:
     raise SystemExit(3)
 
-if marker not in text:
-    text = marker + text
+if current_marker not in text:
+    text = current_marker + text
 
 path.write_text(text, encoding="utf-8")
 PY
@@ -1614,15 +1740,71 @@ PY
 
   case "${patch_status}" in
     0)
-      log "ETA Kayit MainWindow.py dosyasina None.get guard yamasi uygulandi: ${target_file}"
+      log "ETA Kayit MainWindow.py dosyasina safe_get guard yamasi uygulandi: ${target_file}"
       ;;
     3)
-      log "ETA Kayit MainWindow.py icinde beklenen .get karsilastirma satirlari bulunamadi; patch uygulanmadi."
+      log "ETA Kayit MainWindow.py icinde beklenen .get kullanimlari bulunamadi; patch uygulanmadi."
       ;;
     *)
       log "UYARI: ETA Kayit MainWindow.py yamasi uygulanamadi: ${target_file}"
       ;;
   esac
+}
+
+eta_kayit_mainwindow_needs_runtime_repair() {
+  local target_file="${ETA_KAYIT_MAINWINDOW_PATH}"
+
+  [[ -f "${target_file}" ]] || return 1
+
+  if grep -Fq "confirm_grid_school_label" "${target_file}" 2>/dev/null; then
+    grep -Fq "patched by setup_etap23.sh" "${target_file}" 2>/dev/null
+    return
+  fi
+
+  if grep -Fq "import std_opr" "${target_file}" 2>/dev/null; then
+    [[ ! -f "/usr/share/pardus/eta-register/src/std_opr.py" ]]
+    return
+  fi
+
+  return 1
+}
+
+eta_kayit_backup_looks_modern_and_clean() {
+  local backup_file="${ETA_KAYIT_MAINWINDOW_PATH}.etap23-orig"
+
+  [[ -f "${backup_file}" ]] || return 1
+  grep -Fq "confirm_grid_school_label" "${backup_file}" 2>/dev/null || return 1
+  grep -Fq "patched by setup_etap23.sh" "${backup_file}" 2>/dev/null && return 1
+  grep -Fq "import std_opr" "${backup_file}" 2>/dev/null && return 1
+  return 0
+}
+
+repair_eta_kayit_runtime_if_needed() {
+  local target_file="${ETA_KAYIT_MAINWINDOW_PATH}"
+  local backup_file="${target_file}.etap23-orig"
+
+  if ! eta_kayit_mainwindow_needs_runtime_repair; then
+    return 0
+  fi
+
+  log "ETA Kayit MainWindow.py dosyasi bozuk veya paket surumuyle uyumsuz gorunuyor."
+
+  if eta_kayit_backup_looks_modern_and_clean; then
+    if cp -pf "${backup_file}" "${target_file}"; then
+      log "ETA Kayit MainWindow.py temiz yedekten geri yuklendi: ${target_file}"
+      return 0
+    fi
+  fi
+
+  if package_installed "${ETA_KAYIT_PACKAGE}"; then
+    log "${ETA_KAYIT_PACKAGE} paketi yeniden kurulup ETA Kayit dosyalari onariliyor."
+    if DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall "${ETA_KAYIT_PACKAGE}"; then
+      return 0
+    fi
+  fi
+
+  log "UYARI: ETA Kayit dosyalari otomatik onarilamadi: ${target_file}"
+  return 0
 }
 
 write_eta_kayit_register_helper() {
@@ -1632,6 +1814,7 @@ write_eta_kayit_register_helper() {
 
   cat >"${helper}" <<'EOF'
 #!/usr/bin/env python3
+import re
 import sys
 import time
 import unicodedata
@@ -1645,19 +1828,18 @@ except Exception as exc:  # pragma: no cover - hedef sistemde calisacak
 WINDOW_TERMS = ("eta kayit", "eta kayıt")
 RADIO_TERMS = ("okul kodu ile kaydet",)
 ENTRY_TERMS = ("okul kod", "kurum kod")
-CLASS_TERMS = ("sinif", "sınıf")
+CLASS_TERMS = ("sinif", "sınıf", "sinif adi", "sınıf adı", "room name")
 CHECK_CODE_TERMS = ("okul kodunu kontrol et", "okul kodunu kontol et")
 SAVE_BOARD_TERMS = ("bu tahtayi kaydet", "bu tahtayı kaydet")
 SAVE_TERMS = ("bu tahtayi kaydet", "bu tahtayı kaydet", "kaydet")
 APPLY_TERMS = ("uygula", "apply")
+CANCEL_TERMS = ("iptal et", "cancel")
 CONFIRM_TERMS = ("emin misiniz", "kaydedilecektir", "akilli tahta", "akıllı tahta")
 SUCCESS_TERMS = (
-    "cihaz bilgi",
-    "bilgi sayfasi",
-    "bilgi sayfası",
-    "kayitli",
-    "kayıtlı",
-    "registered",
+    "cihaziniz asagidaki bilgilerle kayitlidir",
+    "your device is registered with the following information",
+    "duzenle",
+    "edit",
 )
 
 
@@ -1672,6 +1854,13 @@ def normalize(value):
     value = unicodedata.normalize("NFKD", value)
     value = "".join(ch for ch in value if not unicodedata.combining(ch))
     return " ".join(value.lower().split())
+
+
+def term_matches(content, term):
+    if not content or not term:
+        return False
+    pattern = r"(?<!\w)" + re.escape(term) + r"(?!\w)"
+    return re.search(pattern, content) is not None
 
 
 def iter_nodes(node, depth=0, max_depth=40):
@@ -1714,12 +1903,20 @@ def node_description(node):
 
 def node_matches(node, terms):
     content = " ".join(part for part in (node_name(node), node_description(node)) if part)
-    return any(term in content for term in terms)
+    return any(term_matches(content, term) for term in terms)
 
 
 def node_content(node):
     parts = [node_name(node), node_description(node), normalize(read_text(node))]
     return " ".join(part for part in parts if part)
+
+
+def extents_are_usable(extents):
+    if extents is None:
+        return False
+
+    x, y, width, height = extents
+    return width > 1 and height > 1 and x > -1000000 and y > -1000000
 
 
 def has_editable_text(node):
@@ -1748,6 +1945,22 @@ def is_enabled(node):
         and state.contains(pyatspi.STATE_SENSITIVE)
         and not state.contains(pyatspi.STATE_DEFUNCT)
     )
+
+
+def is_visible(node):
+    extents = node_extents(node)
+    if extents_are_usable(extents):
+        return True
+
+    try:
+        state = node.getState()
+    except Exception:
+        return False
+
+    if state.contains(pyatspi.STATE_DEFUNCT):
+        return False
+
+    return state.contains(pyatspi.STATE_SHOWING) and state.contains(pyatspi.STATE_VISIBLE)
 
 
 def grab_focus(node):
@@ -1851,22 +2064,63 @@ def press_key(keysym):
 
 
 def component_center(node):
+    if node is None:
+        return None
+
+    candidates = [node]
+    parent = parent_node(node)
+    if parent is not None:
+        candidates.append(parent)
+
+    for candidate in iter_nodes(node, max_depth=2):
+        candidates.append(candidate)
+
+    seen = set()
+
+    for candidate in candidates:
+        marker = id(candidate)
+        if marker in seen:
+            continue
+        seen.add(marker)
+
+        try:
+            component = candidate.queryComponent()
+            extents = component.getExtents(pyatspi.XY_SCREEN)
+        except Exception:
+            continue
+
+        if extents.width <= 0 or extents.height <= 0:
+            continue
+
+        x = int(extents.x + (extents.width / 2))
+        y = int(extents.y + (extents.height / 2))
+        return (x, y)
+
+    return None
+
+
+def move_mouse_to_node(node, settle_seconds=0.12):
+    center = component_center(node)
+    if center is None:
+        return None
+
+    x, y = center
+    offset_x = x - 8 if x > 12 else x + 8
+    offset_y = y - 8 if y > 12 else y + 8
+
     try:
-        component = node.queryComponent()
-        extents = component.getExtents(pyatspi.XY_SCREEN)
+        debug(f"Fare dugme merkezine tasiniyor: x={x} y={y}")
+        pyatspi.Registry.generateMouseEvent(offset_x, offset_y, "abs")
+        time.sleep(settle_seconds)
+        pyatspi.Registry.generateMouseEvent(x, y, "abs")
+        time.sleep(settle_seconds)
+        return (x, y)
     except Exception:
         return None
 
-    if extents.width <= 0 or extents.height <= 0:
-        return None
-
-    x = int(extents.x + (extents.width / 2))
-    y = int(extents.y + (extents.height / 2))
-    return (x, y)
-
 
 def mouse_click(node):
-    center = component_center(node)
+    center = move_mouse_to_node(node)
     if center is None:
         return False
 
@@ -1880,24 +2134,32 @@ def mouse_click(node):
 
 
 def mouse_press_release(node):
-    center = component_center(node)
+    center = move_mouse_to_node(node, settle_seconds=0.15)
     if center is None:
         return False
 
     x, y = center
 
     try:
-        pyatspi.Registry.generateMouseEvent(x, y, "abs")
+        time.sleep(0.05)
         pyatspi.Registry.generateMouseEvent(x, y, "b1p")
-        time.sleep(0.1)
+        time.sleep(0.18)
         pyatspi.Registry.generateMouseEvent(x, y, "b1r")
         return True
     except Exception:
         return False
 
 
+def mouse_press_release_repeat(node):
+    if not mouse_press_release(node):
+        return False
+
+    time.sleep(0.2)
+    return mouse_press_release(node)
+
+
 def mouse_double_click(node):
-    center = component_center(node)
+    center = move_mouse_to_node(node)
     if center is None:
         return False
 
@@ -1956,6 +2218,7 @@ def find_button(root, terms):
         root,
         lambda node: is_actionable(node)
         and is_enabled(node)
+        and is_visible(node)
         and node_matches(node, terms),
     )
 
@@ -1974,7 +2237,7 @@ def wait_for_button(root, terms, timeout_seconds):
 
 def root_contains_terms(root, terms):
     for node in iter_nodes(root):
-        if any(term in node_content(node) for term in terms):
+        if is_visible(node) and any(term_matches(node_content(node), term) for term in terms):
             return True
     return False
 
@@ -2000,7 +2263,7 @@ def save_completed(root, class_entry):
     return False
 
 
-def wait_for_success(success_probe, poll_count=8, sleep_seconds=0.4):
+def wait_for_success(success_probe, poll_count=15, sleep_seconds=0.4):
     if success_probe is None:
         return True
 
@@ -2013,23 +2276,36 @@ def wait_for_success(success_probe, poll_count=8, sleep_seconds=0.4):
     return False
 
 
-def trigger_button(button, success_probe=None, use_mouse_fallback=False, use_key_fallback=False):
-    methods = [
+def trigger_button(button, success_probe=None, use_mouse_fallback=False, use_key_fallback=False, prefer_mouse=False):
+    action_methods = [
         ("action", lambda: click(button)),
     ]
 
+    key_methods = []
     if use_key_fallback:
-        methods.extend([
+        key_methods.extend([
             ("space", lambda: press_key(32)),
             ("enter", lambda: press_key(65293)),
         ])
 
+    mouse_methods = []
     if use_mouse_fallback:
-        methods.extend([
-            ("mouse-click", lambda: mouse_click(button)),
+        mouse_methods.extend([
             ("mouse-press-release", lambda: mouse_press_release(button)),
+            ("mouse-press-release-repeat", lambda: mouse_press_release_repeat(button)),
+            ("mouse-click", lambda: mouse_click(button)),
             ("mouse-double-click", lambda: mouse_double_click(button)),
         ])
+
+    methods = []
+    if prefer_mouse:
+        methods.extend(mouse_methods)
+        methods.extend(action_methods)
+        methods.extend(key_methods)
+    else:
+        methods.extend(action_methods)
+        methods.extend(key_methods)
+        methods.extend(mouse_methods)
 
     attempted = []
 
@@ -2084,7 +2360,7 @@ def related_roots(root):
     roots = []
     seen = set()
 
-    for candidate in (root, find_application_node(root), pyatspi.Registry.getDesktop(0)):
+    for candidate in (root, find_application_node(root)):
         if candidate is None:
             continue
 
@@ -2094,6 +2370,11 @@ def related_roots(root):
 
         seen.add(marker)
         roots.append(candidate)
+
+    if not roots:
+        desktop = pyatspi.Registry.getDesktop(0)
+        if desktop is not None:
+            roots.append(desktop)
 
     return roots
 
@@ -2156,6 +2437,33 @@ def detect_post_save_state(root, class_entry):
     return None
 
 
+def detect_post_apply_state(root):
+    apply_button, _apply_root = find_button_across_roots(root, APPLY_TERMS)
+    cancel_button, _cancel_root = find_button_across_roots(root, CANCEL_TERMS)
+
+    if root_contains_terms_across_roots(root, SUCCESS_TERMS):
+        debug("Uygula sonrasi final basari terimi bulundu.")
+        return "done"
+
+    if apply_button is not None:
+        try:
+            if not is_enabled(apply_button):
+                debug("Uygula dugmesi tiklama sonrasi pasif gorunuyor.")
+                return "done"
+        except Exception:
+            pass
+
+    if not root_contains_terms_across_roots(root, CONFIRM_TERMS):
+        debug("Uygula sonrasi onay ekrani metni kayboldu.")
+        return "done"
+
+    if apply_button is None and cancel_button is None:
+        debug("Uygula sonrasi onay dugmeleri gorunmuyor.")
+        return "done"
+
+    return None
+
+
 def activate_apply_if_present(root, timeout_seconds=12):
     apply_button, apply_root = wait_for_button_across_roots(root, APPLY_TERMS, timeout_seconds)
     if apply_button is None:
@@ -2166,18 +2474,50 @@ def activate_apply_if_present(root, timeout_seconds=12):
         "Kaydet sonrasi Uygula dugmesi bulundu: "
         f"{describe_node(apply_button)} arama-koku={describe_node(apply_root)}"
     )
-    return activate_button(
+
+    def apply_success_probe():
+        current_button = find_button(apply_root, APPLY_TERMS)
+        current_cancel = find_button(apply_root, CANCEL_TERMS)
+
+        try:
+            state = apply_button.getState()
+            if state.contains(pyatspi.STATE_DEFUNCT):
+                debug("Uygula dugmesi defunct oldu; basari kabul edildi.")
+                return "done"
+            if not state.contains(pyatspi.STATE_ENABLED) or not state.contains(pyatspi.STATE_SENSITIVE):
+                debug("Uygula dugmesi pasif gorunuyor; basari kabul edildi.")
+                return "done"
+        except Exception:
+            debug("Uygula dugmesi durumu okunamadi; basari kabul edildi.")
+            return "done"
+
+        if root_contains_terms(apply_root, SUCCESS_TERMS):
+            debug("Uygula kokunde final basari terimi bulundu.")
+            return "done"
+
+        if current_button is None and current_cancel is None:
+            debug("Uygula kokunde onay dugmeleri gorunmuyor.")
+            return "done"
+
+        if not root_contains_terms(apply_root, CONFIRM_TERMS):
+            debug("Uygula kokunde onay metni kayboldu.")
+            return "done"
+
+        return None
+
+    return activate_button_until(
         apply_root,
         APPLY_TERMS,
         6,
-        attempts=4,
-        use_mouse_fallback=False,
+        apply_success_probe,
+        attempts=3,
+        use_mouse_fallback=True,
         use_key_fallback=True,
-        success_probe=lambda: find_button_across_roots(root, APPLY_TERMS)[0] is None,
-    )
+        prefer_mouse=True,
+    ) is not None
 
 
-def activate_button(root, terms, timeout_seconds, attempts=3, use_mouse_fallback=False, use_key_fallback=False, success_probe=None):
+def activate_button(root, terms, timeout_seconds, attempts=3, use_mouse_fallback=False, use_key_fallback=False, success_probe=None, prefer_mouse=False):
     for attempt_index in range(attempts):
         button = wait_for_button(root, terms, timeout_seconds)
         if button is None:
@@ -2197,6 +2537,7 @@ def activate_button(root, terms, timeout_seconds, attempts=3, use_mouse_fallback
             success_probe=success_probe,
             use_mouse_fallback=use_mouse_fallback,
             use_key_fallback=use_key_fallback,
+            prefer_mouse=prefer_mouse,
         ):
             time.sleep(0.5)
             return True
@@ -2207,7 +2548,7 @@ def activate_button(root, terms, timeout_seconds, attempts=3, use_mouse_fallback
     return False
 
 
-def activate_button_until(root, terms, timeout_seconds, success_probe, attempts=3, use_mouse_fallback=False, use_key_fallback=False):
+def activate_button_until(root, terms, timeout_seconds, success_probe, attempts=3, use_mouse_fallback=False, use_key_fallback=False, prefer_mouse=False):
     for attempt_index in range(attempts):
         button = wait_for_button(root, terms, timeout_seconds)
         if button is None:
@@ -2227,6 +2568,7 @@ def activate_button_until(root, terms, timeout_seconds, success_probe, attempts=
             success_probe=lambda: success_probe() is not None,
             use_mouse_fallback=use_mouse_fallback,
             use_key_fallback=use_key_fallback,
+            prefer_mouse=prefer_mouse,
         ):
             time.sleep(0.5)
             result = success_probe()
@@ -2256,6 +2598,7 @@ def find_entry(root):
         root,
         lambda node: has_editable_text(node)
         and is_enabled(node)
+        and is_visible(node)
         and node_matches(node, ENTRY_TERMS),
     )
     if labeled_entry is not None:
@@ -2263,7 +2606,7 @@ def find_entry(root):
 
     return find_first(
         root,
-        lambda node: has_editable_text(node) and is_enabled(node),
+        lambda node: has_editable_text(node) and is_enabled(node) and is_visible(node),
     )
 
 
@@ -2271,7 +2614,7 @@ def editable_entries(root):
     return [
         node
         for node in iter_nodes(root)
-        if has_editable_text(node) and is_enabled(node)
+        if has_editable_text(node) and is_enabled(node) and is_visible(node)
     ]
 
 
@@ -2332,6 +2675,7 @@ def choose_school_code_mode(root):
         root,
         lambda node: is_actionable(node)
         and is_enabled(node)
+        and is_visible(node)
         and role_name(node) in {"radio button", "toggle button", "push button"}
         and node_matches(node, RADIO_TERMS),
     )
@@ -2344,6 +2688,9 @@ def choose_school_code_mode(root):
 
 
 def main():
+    if len(sys.argv) == 2 and sys.argv[1] == "--probe-window":
+        return 0 if find_window(3) is not None else 1
+
     if len(sys.argv) != 3:
         print("Kullanim: etap-eta-kayit-register.py <kurum-kodu> <sinif>", file=sys.stderr)
         return 2
@@ -2514,10 +2861,13 @@ open_eta_kayit_if_available() {
   local helper_log
   local launch_pid=""
   local launch_status=0
+  local launch_command_label=""
+  local existing_window_open=0
 
   if ! find_active_graphical_session; then
     log "Aktif grafik oturumu bulunamadigi icin ETA Kayit otomatik acilamadi."
     log "Tahta internete bagliyken Pardus uygulama menusunden 'ETA Kayit' yazilimini acabilirsiniz."
+    user_warn "ETA Kayit otomatik tamamlanamadi. Aktif grafik oturumu bulunamadigi icin uygulamayi elle acmaniz gerekiyor."
     return 0
   fi
 
@@ -2543,19 +2893,23 @@ open_eta_kayit_if_available() {
     log "ETA Kayit uygulamasi bulunamadi. Beklenen paket/uygulama adi: ${ETA_KAYIT_PACKAGE}"
     log "Beklenen masaustu kimligi: ${ETA_KAYIT_DESKTOP_ID}.desktop"
     log "Pardus uygulama menusunde 'ETA Kayit' diye aratarak elle acabilirsiniz."
+    user_warn "ETA Kayit otomatik tamamlanamadi. Uygulama baslatilamadi; kaydi elle acip tamamlamaniz gerekiyor."
     return 0
   fi
 
+  repair_eta_kayit_runtime_if_needed
   patch_eta_kayit_mainwindow_if_needed
 
   if [[ -n "${eta_command:-}" ]]; then
     log "ETA Kayit uygulamasi paket komutu ile acilacak: ${eta_command}"
   fi
+  launch_command_label="${launch_command[*]}"
 
   log "ETA Kayit uygulamasi aciliyor. Tahtanin internete bagli oldugundan emin olun."
   log "Okul/kurum kodu: ${ETA_KAYIT_KURUM_KODU}"
   log "Sinif: ${ETA_KAYIT_SINIF}"
   log "Kayit sirasinda yonetici yetkili sifre istenebilir."
+  log "ETA Kayit baslatma komutu: ${launch_command_label}"
 
   [[ -n "${ACTIVE_GUI_DISPLAY}" ]] && env_args+=("DISPLAY=${ACTIVE_GUI_DISPLAY}")
   [[ -n "${ACTIVE_GUI_XAUTHORITY}" ]] && env_args+=("XAUTHORITY=${ACTIVE_GUI_XAUTHORITY}")
@@ -2563,44 +2917,53 @@ open_eta_kayit_if_available() {
   [[ -n "${ACTIVE_GUI_XDG_RUNTIME_DIR}" ]] && env_args+=("XDG_RUNTIME_DIR=${ACTIVE_GUI_XDG_RUNTIME_DIR}")
   [[ -n "${ACTIVE_GUI_WAYLAND_DISPLAY}" ]] && env_args+=("WAYLAND_DISPLAY=${ACTIVE_GUI_WAYLAND_DISPLAY}")
 
+  if [[ -x "${helper}" ]] && runuser -u "${ACTIVE_GUI_USER}" -- env \
+    "${env_args[@]}" \
+    "${helper}" --probe-window >/dev/null 2>&1; then
+    existing_window_open=1
+    log "ETA Kayit penceresi zaten acik gorunuyor. Mevcut pencere uzerinden devam edilecek."
+  fi
+
   eta_log="$(create_script_log_file eta-kayit-launch)"
   helper_log="$(create_script_log_file eta-kayit-helper)"
   log "ETA Kayit uygulama gunlugu: ${eta_log}"
   log "ETA Kayit otomasyon gunlugu: ${helper_log}"
 
-  runuser -u "${ACTIVE_GUI_USER}" -- env \
-    "${env_args[@]}" \
-    "${launch_command[@]}" >"${eta_log}" 2>&1 &
-  launch_pid=$!
+  if (( ! existing_window_open )); then
+    runuser -u "${ACTIVE_GUI_USER}" -- env \
+      "${env_args[@]}" \
+      "${launch_command[@]}" >"${eta_log}" 2>&1 &
+    launch_pid=$!
 
-  sleep 3
+    sleep 3
 
-  if ! kill -0 "${launch_pid}" 2>/dev/null; then
-    set +e
-    wait "${launch_pid}"
-    launch_status=$?
-    set -e
+    if ! kill -0 "${launch_pid}" 2>/dev/null; then
+      set +e
+      wait "${launch_pid}"
+      launch_status=$?
+      set -e
 
-    if grep -Eiq 'device is registered|registered[^[:alnum:]]+.*true|showing info page|status:[[:space:]]*true' "${eta_log}"; then
-      log "ETA Kayit uygulamasi, bu tahtanin zaten kayitli oldugunu bildirdi. Ek islem yapilmadi."
-      return 0
+      if grep -Eiq 'device is registered|registered[^[:alnum:]]+.*true|showing info page|status:[[:space:]]*true' "${eta_log}"; then
+        log "ETA Kayit uygulamasi, bu tahtanin zaten kayitli oldugunu bildirdi. Ek islem yapilmadi."
+        return 0
+      fi
+
+      log "ETA Kayit baslatma komutu erken sonlandi; pencere aramasi ile devam edilecek."
+      if [[ "${launch_status}" -ne 0 ]]; then
+        log "ETA Kayit baslatma komutu cikis kodu: ${launch_status}"
+      fi
+    else
+      disown "${launch_pid}" 2>/dev/null || true
     fi
-
-    log "ETA Kayit uygulamasi beklenenden erken kapandi."
-    if [[ "${launch_status}" -ne 0 ]]; then
-      log "ETA Kayit cikis kodu: ${launch_status}"
-    fi
-    log "Ayrintili uygulama gunlugu: ${eta_log}"
-    log "Ayrintili otomasyon gunlugu: ${helper_log}"
-    return 0
+  else
+    : >"${eta_log}"
   fi
-
-  disown "${launch_pid}" 2>/dev/null || true
 
   if [[ ! -x "${helper}" ]]; then
     log "ETA Kayit otomasyon yardimcisi bulunamadi. Uygulama acildi, kodu elle girebilirsiniz."
     log "Ayrintili uygulama gunlugu: ${eta_log}"
     log "Ayrintili otomasyon gunlugu: ${helper_log}"
+    user_warn "ETA Kayit otomatik tamamlanamadi. Yardimci arac bulunamadigi icin kurum kodunu ve sinif bilgisini elle girmeniz gerekiyor."
     return 0
   fi
 
@@ -2612,6 +2975,7 @@ open_eta_kayit_if_available() {
       log "ETA Kayit dugmesi tetiklendi ancak uygulama icinde Python hatasi olustu."
       log "ETA Kayit otomasyon gunlugu: ${helper_log}"
       log "ETA Kayit uygulama gunlugu: ${eta_log}"
+      user_warn "ETA Kayit otomatik tamamlanamadi. Uygulama icinde hata olustugu icin kaydi elle kontrol etmeniz gerekiyor."
       return 0
     fi
 
@@ -2624,10 +2988,39 @@ open_eta_kayit_if_available() {
       return 0
     fi
 
+    if grep -Eq 'Traceback \(most recent call last\)|AttributeError:|TypeError:|KeyError:' "${eta_log}"; then
+      log "ETA Kayit dugmesi tetiklendi ancak uygulama icinde Python hatasi olustu."
+      log "ETA Kayit otomasyon gunlugu: ${helper_log}"
+      log "ETA Kayit uygulama gunlugu: ${eta_log}"
+      user_warn "ETA Kayit otomatik tamamlanamadi. Uygulama icinde hata olustugu icin kaydi elle kontrol etmeniz gerekiyor."
+      return 0
+    fi
+
     log "ETA Kayit otomasyonu tamamlanamadi. Uygulama acik kaldi; kurum kodu, sinif ve varsa yonetici sifresini elle tamamlayabilirsiniz."
     log "ETA Kayit otomasyon gunlugu: ${helper_log}"
     log "ETA Kayit uygulama gunlugu: ${eta_log}"
+    user_warn "ETA Kayit otomatik tamamlanamadi. Uygulama acik kaldi; kurum kodu, sinif ve gerekiyorsa yonetici sifresini elle tamamlamaniz gerekiyor."
   fi
+}
+
+ensure_eta_kayit_package_ready_for_launch() {
+  local package_was_installed=0
+
+  if package_installed "${ETA_KAYIT_PACKAGE}"; then
+    package_was_installed=1
+  fi
+
+  if install_or_upgrade_eta_kayit_package; then
+    return 0
+  fi
+
+  if ((package_was_installed)); then
+    log "Uyari: ${ETA_KAYIT_PACKAGE} guncellenemedi. Mevcut kurulu surum ile ETA Kayit acilacak."
+    return 0
+  fi
+
+  log "Hata: ${ETA_KAYIT_PACKAGE} paketi kurulamadigi icin ETA Kayit acilamayacak."
+  return 1
 }
 
 prepare_eag_package() {
@@ -3839,6 +4232,12 @@ reinstall_ahenk_package() {
   DEBIAN_FRONTEND=noninteractive apt-get install -y "${AHENK_PACKAGE}"
 }
 
+upgrade_all_packages_last_resort() {
+  apt_update_once
+  log "Son care olarak tum sistem paketleri guncelleniyor."
+  DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y
+}
+
 repair_eta_kayit_registration() {
   run_step "eta-register paketini kurma veya guncelleme" install_or_upgrade_eta_kayit_package
   run_step "ahenk paketini kaldirma" purge_ahenk_package
@@ -3846,8 +4245,12 @@ repair_eta_kayit_registration() {
   run_step "ahenk kalinti klasorlerini temizleme" remove_ahenk_leftover_dirs
   run_step "gereksiz paketleri temizleme" cleanup_ahenk_dependencies
 
-  if [[ "${ACTION_MODE}" == "eta-kayit-repair-reinstall-ahenk" ]]; then
+  if [[ "${ACTION_MODE}" == "eta-kayit-repair-reinstall-ahenk" || "${ACTION_MODE}" == "eta-kayit-repair-full-upgrade" ]]; then
     run_step "ahenk paketini yeniden kurma" reinstall_ahenk_package
+  fi
+
+  if [[ "${ACTION_MODE}" == "eta-kayit-repair-full-upgrade" ]]; then
+    run_step "tum sistem paketlerini guncelleme" upgrade_all_packages_last_resort
   fi
 
   log "ETA Kayit kayit onarim akisi tamamlandi."
@@ -4004,51 +4407,27 @@ run_wine_step() {
   printf 'Bilgi: Bu adim sessiz calisabilir; pencere bir sure ayni gorunebilir.\n'
   step_log="\$(mktemp)"
   sanitize_graphical_environment
-  if command -v timeout >/dev/null 2>&1; then
-    timeout --foreground 900s xvfb-run -a -s "\${XVFB_SERVER_ARGS}" env \
-      HOME="\${HOME}" \
-      USER="\${USER_NAME}" \
-      LOGNAME="\${USER_NAME}" \
-      PATH="\${PATH}" \
-      WINEARCH="\${WINEARCH}" \
-      WINEPREFIX="\${WINEPREFIX}" \
-      WINEDEBUG="\${WINEDEBUG}" \
-      WINEDLLOVERRIDES='mscoree,mshtml=' \
-      WINETRICKS_GUI="\${WINETRICKS_GUI}" \
-      LIBGL_ALWAYS_SOFTWARE="\${LIBGL_ALWAYS_SOFTWARE}" \
-      GALLIUM_DRIVER="\${GALLIUM_DRIVER}" \
-      MESA_LOADER_DRIVER_OVERRIDE="\${MESA_LOADER_DRIVER_OVERRIDE}" \
-      "\$@" >"\${step_log}" 2>&1 &
-    pid=\$!
-    while kill -0 "\${pid}" >/dev/null 2>&1; do
-      sleep 15
-      heartbeat_counter=\$((heartbeat_counter + 15))
-      printf 'Bilgi: %s adimi suruyor... (%ss)\n' "\${description}" "\${heartbeat_counter}"
-    done
-    wait "\${pid}" || status=\$?
-  else
-    xvfb-run -a -s "\${XVFB_SERVER_ARGS}" env \
-      HOME="\${HOME}" \
-      USER="\${USER_NAME}" \
-      LOGNAME="\${USER_NAME}" \
-      PATH="\${PATH}" \
-      WINEARCH="\${WINEARCH}" \
-      WINEPREFIX="\${WINEPREFIX}" \
-      WINEDEBUG="\${WINEDEBUG}" \
-      WINEDLLOVERRIDES='mscoree,mshtml=' \
-      WINETRICKS_GUI="\${WINETRICKS_GUI}" \
-      LIBGL_ALWAYS_SOFTWARE="\${LIBGL_ALWAYS_SOFTWARE}" \
-      GALLIUM_DRIVER="\${GALLIUM_DRIVER}" \
-      MESA_LOADER_DRIVER_OVERRIDE="\${MESA_LOADER_DRIVER_OVERRIDE}" \
-      "\$@" >"\${step_log}" 2>&1 &
-    pid=\$!
-    while kill -0 "\${pid}" >/dev/null 2>&1; do
-      sleep 15
-      heartbeat_counter=\$((heartbeat_counter + 15))
-      printf 'Bilgi: %s adimi suruyor... (%ss)\n' "\${description}" "\${heartbeat_counter}"
-    done
-    wait "\${pid}" || status=\$?
-  fi
+  xvfb-run -a -s "\${XVFB_SERVER_ARGS}" env \
+    HOME="\${HOME}" \
+    USER="\${USER_NAME}" \
+    LOGNAME="\${USER_NAME}" \
+    PATH="\${PATH}" \
+    WINEARCH="\${WINEARCH}" \
+    WINEPREFIX="\${WINEPREFIX}" \
+    WINEDEBUG="\${WINEDEBUG}" \
+    WINEDLLOVERRIDES='mscoree,mshtml=' \
+    WINETRICKS_GUI="\${WINETRICKS_GUI}" \
+    LIBGL_ALWAYS_SOFTWARE="\${LIBGL_ALWAYS_SOFTWARE}" \
+    GALLIUM_DRIVER="\${GALLIUM_DRIVER}" \
+    MESA_LOADER_DRIVER_OVERRIDE="\${MESA_LOADER_DRIVER_OVERRIDE}" \
+    "\$@" >"\${step_log}" 2>&1 &
+  pid=\$!
+  while kill -0 "\${pid}" >/dev/null 2>&1; do
+    sleep 15
+    heartbeat_counter=\$((heartbeat_counter + 15))
+    printf 'Bilgi: %s adimi suruyor... (%ss)\n' "\${description}" "\${heartbeat_counter}"
+  done
+  wait "\${pid}" || status=\$?
 
   if [[ "\${status}" -ne 0 ]] && \
     grep -Fq 'XIO:  fatal IO error' "\${step_log}" && \
@@ -4080,10 +4459,6 @@ run_wine_step() {
 
   stop_wineserver_if_needed
   rm -f "\${step_log}"
-  if [[ "\${status}" -eq 124 ]]; then
-    printf 'Uyari: %s adimi zaman asimina ugradi. Wine islemleri sonlandiriliyor.\n' "\${description}" >&2
-    return "\${status}"
-  fi
   if [[ "\${status}" -ne 0 ]]; then
     return "\${status}"
   fi
@@ -5471,6 +5846,11 @@ require_commands_for_selected_steps() {
     require_command python3
   fi
 
+  if is_enabled "${ENABLE_PACKAGE_UPGRADE}"; then
+    require_command apt-mark
+    need_apt=1
+  fi
+
   if is_enabled "${ENABLE_ETA_TOUCHDRV}"; then
     require_command apt-cache
     require_command systemctl
@@ -5502,6 +5882,7 @@ require_commands_for_selected_steps() {
     require_command runuser
     require_command python3
     require_command dpkg-query
+    need_apt=1
   fi
 
   if is_enabled "${ENABLE_IDLE_SHUTDOWN}" || is_enabled "${ENABLE_SCHEDULED_SHUTDOWN}"; then
@@ -5509,6 +5890,7 @@ require_commands_for_selected_steps() {
   fi
 
   if is_enabled "${ENABLE_EAG_CLIENT}" || \
+     is_enabled "${ENABLE_PACKAGE_UPGRADE}" || \
      is_enabled "${ENABLE_ETA_QR_LOGIN}" || \
      is_enabled "${ENABLE_ETA_TOUCHDRV}" || \
      is_enabled "${ENABLE_DISABLE_SCREENSAVER}" || \
@@ -5675,6 +6057,10 @@ main() {
   run_step "yardimci dosyalari hazirlama" install_launcher_dependencies
   run_step "gerekli paket onkosullarini kurma" install_deferred_runtime_packages
 
+  if is_enabled "${ENABLE_PACKAGE_UPGRADE}"; then
+    run_step "kurulu paketleri guncelleme" upgrade_installed_packages
+  fi
+
   if is_enabled "${ENABLE_IDLE_SHUTDOWN}"; then
     run_step "bosda kapanma oturum izleyicisini baslatma" start_idle_shutdown_monitor_for_active_session
   fi
@@ -5691,12 +6077,12 @@ main() {
     run_step "eta-touchdrv paketini kurma veya guncelleme" install_or_upgrade_eta_touchdrv
   fi
 
-  if is_enabled "${ENABLE_WINE}"; then
-    run_step "Wine ve winetricks kurulumunu yapma" install_and_configure_wine
-  fi
-
   if is_enabled "${ENABLE_ETAPADMIN_PASSWORD}"; then
     run_step "${ETAPADMIN_USER} parolasini degistirme" set_etapadmin_password
+  fi
+
+  if is_enabled "${ENABLE_WINE}"; then
+    run_step "Wine ve winetricks kurulumunu yapma" install_and_configure_wine
   fi
 
   run_step "kurulum sonu kontrollerini calistirma" run_post_install_checks
@@ -5705,6 +6091,7 @@ main() {
   log "Kurulum tamamlandi."
 
   if is_enabled "${ENABLE_OPEN_ETA_KAYIT}"; then
+    run_step "eta-register paketini kurma veya guncelleme" ensure_eta_kayit_package_ready_for_launch
     run_step "ETA Kayit uygulamasini acma" open_eta_kayit_if_available
   fi
 

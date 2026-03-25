@@ -8,6 +8,7 @@ ETAP23_RUNTIME_DIR="${ETAP23_RUNTIME_DIR:-${SCRIPT_DIR}}"
 export ETAP23_RUNTIME_DIR
 
 REINSTALL_AHENK=0
+FULL_UPGRADE=0
 SKIP_APT_UPDATE=0
 GUI_MODE=0
 
@@ -16,6 +17,7 @@ usage() {
 Kullanim:
   sudo ./ahenk_kaldir.sh
   sudo ./ahenk_kaldir.sh --reinstall-ahenk
+  sudo ./ahenk_kaldir.sh --full-upgrade
   sudo ./ahenk_kaldir.sh --skip-apt-update
   ./ahenk_kaldir.sh --gui
 
@@ -23,6 +25,7 @@ Bu sarmalayici, islemi setup_etap23.sh icindeki merkezi bakim moduna yonlendirir
 
 Secenekler:
   --reinstall-ahenk   Temizlikten sonra ahenk paketini yeniden kur
+  --full-upgrade      Temizlikten sonra ahenk paketini yeniden kur ve tum paketleri guncelle
   --skip-apt-update   apt-get update adimini atla
   --gui               Grafik arayuz ile ETA Kayit duzelt/sifirla akisini ac
   -h, --help          Bu yardimi goster
@@ -39,6 +42,9 @@ parse_args() {
     case "$1" in
       --reinstall-ahenk)
         REINSTALL_AHENK=1
+        ;;
+      --full-upgrade)
+        FULL_UPGRADE=1
         ;;
       --skip-apt-update)
         SKIP_APT_UPDATE=1
@@ -73,7 +79,9 @@ main() {
     forwarded_args+=(--skip-apt-update)
   fi
 
-  if ((REINSTALL_AHENK)); then
+  if ((FULL_UPGRADE)); then
+    forwarded_args+=(--eta-kayit-repair-full-upgrade)
+  elif ((REINSTALL_AHENK)); then
     forwarded_args+=(--eta-kayit-repair-reinstall-ahenk)
   else
     forwarded_args+=(--eta-kayit-repair)
