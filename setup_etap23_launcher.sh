@@ -21,6 +21,7 @@ TTY_DEVICE="${TTY_DEVICE:-/dev/tty}"
 PAUSE_ON_ERROR_REQUESTED=0
 TOUCHDRV_SUMMARY_FILE=""
 RUN_REPORT_FILE=""
+RUN_REPORT_PERSIST=0
 
 has_tty() {
   [[ -t 1 && -r "${TTY_DEVICE}" && -w "${TTY_DEVICE}" ]]
@@ -90,17 +91,146 @@ show_after_1600_notice_if_needed() {
   print_line "Bilgi: ${notice_text}\n"
 }
 
+launcher_action_generates_report_by_default() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --touchdrv-check|--touch-calibration-status|--wine-check|--wine-diag|--eta-kayit-preflight|--service-health-check|--usb-report|--resolution-status)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+requested_report_file_from_args() {
+  local idx next_idx
+
+  for ((idx = 0; idx < ${#GUI_ARGS[@]}; ++idx)); do
+    if [[ "${GUI_ARGS[idx]}" == "--report-file" ]]; then
+      next_idx=$((idx + 1))
+      if ((next_idx < ${#GUI_ARGS[@]})); then
+        printf '%s\n' "${GUI_ARGS[next_idx]}"
+        return 0
+      fi
+      return 1
+    fi
+  done
+
+  return 1
+}
+
+normalize_launcher_report_path() {
+  local report_path="$1"
+
+  [[ "${report_path}" == /* ]] || report_path="$(pwd -P)/${report_path}"
+  printf '%s\n' "${report_path}"
+}
+
+sanitize_launcher_report_slug() {
+  local arg normalized=""
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --touchdrv-check|--touch-calibration-status|--wine-check|--wine-diag|--eta-kayit-preflight|--service-health-check|--usb-report|--resolution-status)
+        normalized="${arg#--}"
+        break
+        ;;
+    esac
+  done
+
+  [[ -n "${normalized}" ]] || normalized="${LAUNCHER_MODE:-etap23-launcher}"
+  normalized="$(printf '%s' "${normalized}" |
+    tr '[:upper:]' '[:lower:]' |
+    sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g')"
+  [[ -n "${normalized}" ]] || normalized="etap23-launcher"
+  printf '%s\n' "${normalized}"
+}
+
+ensure_launcher_report_dir() {
+  local target_dir="${ETAP23_RUNTIME_DIR}"
+
+  if [[ ! -d "${target_dir}" ]]; then
+    mkdir -p "${target_dir}" 2>/dev/null || true
+  fi
+
+  if [[ -d "${target_dir}" && -w "${target_dir}" ]]; then
+    printf '%s\n' "${target_dir}"
+    return 0
+  fi
+
+  target_dir="/tmp/etap23-reports"
+  mkdir -p "${target_dir}" || return 1
+  chmod 700 "${target_dir}" 2>/dev/null || true
+  printf '%s\n' "${target_dir}"
+}
+
+create_launcher_report_file() {
+  local report_dir slug
+
+  report_dir="$(ensure_launcher_report_dir)" || return 1
+  slug="$(sanitize_launcher_report_slug)"
+  mktemp "${report_dir}/rapor-${slug}.XXXXXX.log"
+}
+
+sync_run_report_env_args() {
+  local item
+  local filtered=()
+
+  for item in "${GUI_ENV_ARGS[@]:-}"; do
+    case "${item}" in
+      ETAP23_REPORT_FILE=*|ETAP23_LAUNCHER_CAPTURES_REPORT=*)
+        ;;
+      *)
+        filtered+=("${item}")
+        ;;
+    esac
+  done
+
+  GUI_ENV_ARGS=("${filtered[@]}")
+
+  if [[ -n "${RUN_REPORT_FILE}" && "${RUN_REPORT_PERSIST}" == "1" ]]; then
+    GUI_ENV_ARGS+=("ETAP23_REPORT_FILE=${RUN_REPORT_FILE}")
+    GUI_ENV_ARGS+=("ETAP23_LAUNCHER_CAPTURES_REPORT=1")
+  fi
+}
+
 prepare_run_report_file() {
+  local requested_report=""
+  local report_dir=""
+
   [[ -n "${RUN_REPORT_FILE}" ]] && return 0
 
-  RUN_REPORT_FILE="$(mktemp /tmp/etap23-launcher-report.XXXXXX.log)"
+  requested_report="$(requested_report_file_from_args || true)"
+
+  if [[ -n "${requested_report}" ]]; then
+    RUN_REPORT_FILE="$(normalize_launcher_report_path "${requested_report}")"
+    report_dir="$(dirname "${RUN_REPORT_FILE}")"
+    mkdir -p "${report_dir}" || return 1
+    : >"${RUN_REPORT_FILE}" || return 1
+    RUN_REPORT_PERSIST=1
+  elif launcher_action_generates_report_by_default; then
+    RUN_REPORT_FILE="$(create_launcher_report_file)" || return 1
+    RUN_REPORT_PERSIST=1
+  else
+    RUN_REPORT_FILE="$(mktemp /tmp/etap23-launcher-report.XXXXXX.log)"
+    RUN_REPORT_PERSIST=0
+  fi
+
   chmod 600 "${RUN_REPORT_FILE}" 2>/dev/null || true
+  sync_run_report_env_args
 }
 
 cleanup_run_report_file() {
   [[ -n "${RUN_REPORT_FILE}" ]] || return 0
-  rm -f "${RUN_REPORT_FILE}" 2>/dev/null || true
+  if [[ "${RUN_REPORT_PERSIST}" != "1" ]]; then
+    rm -f "${RUN_REPORT_FILE}" 2>/dev/null || true
+  fi
   RUN_REPORT_FILE=""
+  RUN_REPORT_PERSIST=0
+  sync_run_report_env_args
 }
 
 show_error_report_if_available() {
@@ -133,6 +263,11 @@ run_report_has_user_warning() {
   grep -Eq 'KULLANICI_UYARI:' "${RUN_REPORT_FILE}"
 }
 
+show_saved_report_notice() {
+  [[ "${RUN_REPORT_PERSIST}" == "1" && -n "${RUN_REPORT_FILE}" ]] || return 0
+  print_line "Rapor dosyasi: ${RUN_REPORT_FILE}\n"
+}
+
 finish_with_status() {
   local status="$1"
 
@@ -151,6 +286,7 @@ finish_with_status() {
     fi
   fi
 
+  show_saved_report_notice
   show_error_report_if_available "${status}"
 
   if [[ "${status}" -ne 0 && "${PAUSE_ON_ERROR_REQUESTED}" == "1" ]]; then
@@ -266,13 +402,23 @@ run_main_with_sudo_password() {
 run_main_with_sudo_password_capture() {
   local candidate="$1"
   local output_file="$2"
+  local status
 
   [[ -n "${candidate}" ]] || return 1
+  set +e
   {
     printf '%s\n' "${candidate}" | sudo -S -k -p '' env \
     "${GUI_ENV_ARGS[@]}" \
       "${MAIN_SCRIPT}" "${GUI_ARGS[@]}"
   } >"${output_file}" 2>&1
+  status=$?
+  set -e
+
+  if [[ -n "${RUN_REPORT_FILE}" && -f "${output_file}" ]]; then
+    cat "${output_file}" >>"${RUN_REPORT_FILE}" 2>/dev/null || true
+  fi
+
+  return "${status}"
 }
 
 get_gui_session_type() {
@@ -298,6 +444,15 @@ launcher_mode_label() {
       ;;
     eta-kayit-repair)
       printf 'ETA Kayit Duzelt/Sifirla Araci'
+      ;;
+    service-health)
+      printf 'ETAP Servis Saglik Paneli'
+      ;;
+    usb-repair)
+      printf 'ETA USB Onarim Araci'
+      ;;
+    resolution)
+      printf 'ETAP Cozunurluk Profilleri'
       ;;
     *)
       printf 'ETAP23 Ilk Kurulum'
@@ -397,7 +552,7 @@ wine_action_is_informational() {
 
   for arg in "${GUI_ARGS[@]:-}"; do
     case "${arg}" in
-      --wine-check|--wine-version)
+      --wine-check|--wine-diag|--wine-version|--wine-sync-shortcuts)
         return 0
         ;;
     esac
@@ -415,8 +570,16 @@ wine_action_dialog_title() {
         printf 'ETAP Wine Durum Kontrolu\n'
         return 0
         ;;
+      --wine-diag)
+        printf 'ETAP Wine Teshis Raporu\n'
+        return 0
+        ;;
       --wine-version)
         printf 'ETAP Wine Surum Bilgisi\n'
+        return 0
+        ;;
+      --wine-sync-shortcuts)
+        printf 'ETAP Wine Kisayol Senkronu\n'
         return 0
         ;;
     esac
@@ -425,15 +588,144 @@ wine_action_dialog_title() {
   printf 'ETAP Wine Bilgisi\n'
 }
 
+eta_kayit_action_is_informational() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --eta-kayit-preflight)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+eta_kayit_action_dialog_title() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --eta-kayit-preflight)
+        printf 'ETA Kayit On Kontrol Raporu\n'
+        return 0
+        ;;
+    esac
+  done
+
+  printf 'ETA Kayit Bilgisi\n'
+}
+
+service_health_action_is_informational() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --service-health-check)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+service_health_action_dialog_title() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --service-health-check)
+        printf 'Servis Saglik Raporu\n'
+        return 0
+        ;;
+    esac
+  done
+
+  printf 'Servis Saglik Bilgisi\n'
+}
+
+usb_action_is_informational() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --usb-report)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+usb_action_dialog_title() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --usb-report)
+        printf 'USB Durum Raporu\n'
+        return 0
+        ;;
+    esac
+  done
+
+  printf 'USB Bilgisi\n'
+}
+
+resolution_action_is_informational() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --resolution-status)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+resolution_action_dialog_title() {
+  local arg
+
+  for arg in "${GUI_ARGS[@]:-}"; do
+    case "${arg}" in
+      --resolution-status)
+        printf 'Cozunurluk Durum Raporu\n'
+        return 0
+        ;;
+    esac
+  done
+
+  printf 'Cozunurluk Bilgisi\n'
+}
+
 run_main_capture_output() {
   local output_file="$1"
-  run_with_status "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" >"${output_file}" 2>&1
+  local status
+
+  set +e
+  "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" >"${output_file}" 2>&1
+  status=$?
+  set -e
+
+  if [[ -n "${RUN_REPORT_FILE}" && -f "${output_file}" ]]; then
+    cat "${output_file}" >>"${RUN_REPORT_FILE}" 2>/dev/null || true
+  fi
+
+  return "${status}"
 }
 
 # shellcheck disable=SC2329
 run_main_with_sudo_prompt_capture() {
   local output_file="$1"
+  local status
 
+  set +e
   if has_tty; then
     {
       run_command_with_tty_input sudo -k -p '[sudo] Yonetici parolasi: ' env \
@@ -447,6 +739,14 @@ run_main_with_sudo_prompt_capture() {
         "${MAIN_SCRIPT}" "${GUI_ARGS[@]}"
     } >"${output_file}" 2>&1
   fi
+  status=$?
+  set -e
+
+  if [[ -n "${RUN_REPORT_FILE}" && -f "${output_file}" ]]; then
+    cat "${output_file}" >>"${RUN_REPORT_FILE}" 2>/dev/null || true
+  fi
+
+  return "${status}"
 }
 
 try_bootstrap_sudo_capture() {
@@ -468,6 +768,7 @@ try_bootstrap_sudo_capture() {
 
 run_main_capture_with_privileges() {
   local output_file="$1"
+  local status
 
   if [[ "${EUID}" -eq 0 ]]; then
     run_main_capture_output "${output_file}"
@@ -484,11 +785,20 @@ run_main_capture_with_privileges() {
   fi
 
   if command -v pkexec >/dev/null 2>&1; then
-    run_with_status pkexec env "${GUI_ENV_ARGS[@]}" "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" >"${output_file}" 2>&1
-    return "$?"
+    set +e
+    pkexec env "${GUI_ENV_ARGS[@]}" "${MAIN_SCRIPT}" "${GUI_ARGS[@]}" >"${output_file}" 2>&1
+    status=$?
+    set -e
+    if [[ -n "${RUN_REPORT_FILE}" && -f "${output_file}" ]]; then
+      cat "${output_file}" >>"${RUN_REPORT_FILE}" 2>/dev/null || true
+    fi
+    return "${status}"
   fi
 
   printf 'HATA: Bu sistemde ne sudo ne de pkexec bulundu.\n' >"${output_file}"
+  if [[ -n "${RUN_REPORT_FILE}" && -f "${output_file}" ]]; then
+    cat "${output_file}" >>"${RUN_REPORT_FILE}" 2>/dev/null || true
+  fi
   return 1
 }
 
@@ -508,6 +818,149 @@ show_wine_informational_dialog() {
 
   {
     printf '%s\n\n' "${body}"
+    if [[ "${RUN_REPORT_PERSIST}" == "1" && -n "${RUN_REPORT_FILE}" ]]; then
+      printf 'Rapor dosyasi: %s\n\n' "${RUN_REPORT_FILE}"
+    fi
+    if [[ -s "${output_file}" ]]; then
+      cat "${output_file}"
+    else
+      printf 'Cikti uretilemedi.\n'
+    fi
+  } >"${temp_view}"
+
+  zenity --text-info \
+    --title="${title}" \
+    --width=900 \
+    --height=640 \
+    --filename="${temp_view}" || true
+
+  rm -f "${temp_view}"
+}
+
+show_eta_kayit_informational_dialog() {
+  local status="$1"
+  local output_file="$2"
+  local title body temp_view
+
+  title="$(eta_kayit_action_dialog_title)"
+  temp_view="$(mktemp)"
+
+  if [[ "${status}" -eq 0 ]]; then
+    body="Islem tamamlandi. Ayrintilar asagida."
+  else
+    body="Islem hata veya uyari ile sonlandi. Ayrintilar asagida."
+  fi
+
+  {
+    printf '%s\n\n' "${body}"
+    if [[ "${RUN_REPORT_PERSIST}" == "1" && -n "${RUN_REPORT_FILE}" ]]; then
+      printf 'Rapor dosyasi: %s\n\n' "${RUN_REPORT_FILE}"
+    fi
+    if [[ -s "${output_file}" ]]; then
+      cat "${output_file}"
+    else
+      printf 'Cikti uretilemedi.\n'
+    fi
+  } >"${temp_view}"
+
+  zenity --text-info \
+    --title="${title}" \
+    --width=900 \
+    --height=640 \
+    --filename="${temp_view}" || true
+
+  rm -f "${temp_view}"
+}
+
+show_service_health_informational_dialog() {
+  local status="$1"
+  local output_file="$2"
+  local title body temp_view
+
+  title="$(service_health_action_dialog_title)"
+  temp_view="$(mktemp)"
+
+  if [[ "${status}" -eq 0 ]]; then
+    body="Islem tamamlandi. Ayrintilar asagida."
+  else
+    body="Islem hata veya uyari ile sonlandi. Ayrintilar asagida."
+  fi
+
+  {
+    printf '%s\n\n' "${body}"
+    if [[ "${RUN_REPORT_PERSIST}" == "1" && -n "${RUN_REPORT_FILE}" ]]; then
+      printf 'Rapor dosyasi: %s\n\n' "${RUN_REPORT_FILE}"
+    fi
+    if [[ -s "${output_file}" ]]; then
+      cat "${output_file}"
+    else
+      printf 'Cikti uretilemedi.\n'
+    fi
+  } >"${temp_view}"
+
+  zenity --text-info \
+    --title="${title}" \
+    --width=900 \
+    --height=640 \
+    --filename="${temp_view}" || true
+
+  rm -f "${temp_view}"
+}
+
+show_usb_informational_dialog() {
+  local status="$1"
+  local output_file="$2"
+  local title body temp_view
+
+  title="$(usb_action_dialog_title)"
+  temp_view="$(mktemp)"
+
+  if [[ "${status}" -eq 0 ]]; then
+    body="Islem tamamlandi. Ayrintilar asagida."
+  else
+    body="Islem hata veya uyari ile sonlandi. Ayrintilar asagida."
+  fi
+
+  {
+    printf '%s\n\n' "${body}"
+    if [[ "${RUN_REPORT_PERSIST}" == "1" && -n "${RUN_REPORT_FILE}" ]]; then
+      printf 'Rapor dosyasi: %s\n\n' "${RUN_REPORT_FILE}"
+    fi
+    if [[ -s "${output_file}" ]]; then
+      cat "${output_file}"
+    else
+      printf 'Cikti uretilemedi.\n'
+    fi
+  } >"${temp_view}"
+
+  zenity --text-info \
+    --title="${title}" \
+    --width=900 \
+    --height=640 \
+    --filename="${temp_view}" || true
+
+  rm -f "${temp_view}"
+}
+
+show_resolution_informational_dialog() {
+  local status="$1"
+  local output_file="$2"
+  local title body temp_view
+
+  title="$(resolution_action_dialog_title)"
+  temp_view="$(mktemp)"
+
+  if [[ "${status}" -eq 0 ]]; then
+    body="Islem tamamlandi. Ayrintilar asagida."
+  else
+    body="Islem hata veya uyari ile sonlandi. Ayrintilar asagida."
+  fi
+
+  {
+    printf '%s\n\n' "${body}"
+    if [[ "${RUN_REPORT_PERSIST}" == "1" && -n "${RUN_REPORT_FILE}" ]]; then
+      printf 'Rapor dosyasi: %s\n\n' "${RUN_REPORT_FILE}"
+    fi
     if [[ -s "${output_file}" ]]; then
       cat "${output_file}"
     else
@@ -543,11 +996,167 @@ handle_wine_informational_loop() {
       return 1
     fi
 
+    cleanup_run_report_file
+    if ! prepare_run_report_file; then
+      print_line 'HATA: Rapor dosyasi hazirlanamadi.\n'
+      pause_before_exit
+      exit 1
+    fi
+
     output_file="$(mktemp)"
     run_main_capture_with_privileges "${output_file}"
     status="$?"
     show_wine_informational_dialog "${status}" "${output_file}"
     rm -f "${output_file}"
+    cleanup_run_report_file
+
+    GUI_ARGS=(--pause-on-error)
+  done
+}
+
+handle_service_health_informational_loop() {
+  local status output_file
+
+  [[ "${LAUNCHER_MODE}" == "service-health" ]] || return 1
+  launcher_can_use_zenity || return 1
+
+  while true; do
+    if [[ "${#GUI_ARGS[@]}" -eq 1 && "${GUI_ARGS[0]}" == "--pause-on-error" ]]; then
+      if ! collect_service_health_gui_args; then
+        print_line 'Islem iptal edildi.\n'
+        pause_before_exit
+        exit 0
+      fi
+    fi
+
+    if ! service_health_action_is_informational; then
+      return 1
+    fi
+
+    cleanup_run_report_file
+    if ! prepare_run_report_file; then
+      print_line 'HATA: Rapor dosyasi hazirlanamadi.\n'
+      pause_before_exit
+      exit 1
+    fi
+
+    output_file="$(mktemp)"
+    run_main_capture_with_privileges "${output_file}"
+    status="$?"
+    show_service_health_informational_dialog "${status}" "${output_file}"
+    rm -f "${output_file}"
+    cleanup_run_report_file
+
+    GUI_ARGS=(--pause-on-error)
+  done
+}
+
+handle_usb_informational_loop() {
+  local status output_file
+
+  [[ "${LAUNCHER_MODE}" == "usb-repair" ]] || return 1
+  launcher_can_use_zenity || return 1
+
+  while true; do
+    if [[ "${#GUI_ARGS[@]}" -eq 1 && "${GUI_ARGS[0]}" == "--pause-on-error" ]]; then
+      if ! collect_usb_repair_gui_args; then
+        print_line 'Islem iptal edildi.\n'
+        pause_before_exit
+        exit 0
+      fi
+    fi
+
+    if ! usb_action_is_informational; then
+      return 1
+    fi
+
+    cleanup_run_report_file
+    if ! prepare_run_report_file; then
+      print_line 'HATA: Rapor dosyasi hazirlanamadi.\n'
+      pause_before_exit
+      exit 1
+    fi
+
+    output_file="$(mktemp)"
+    run_main_capture_with_privileges "${output_file}"
+    status="$?"
+    show_usb_informational_dialog "${status}" "${output_file}"
+    rm -f "${output_file}"
+    cleanup_run_report_file
+
+    GUI_ARGS=(--pause-on-error)
+  done
+}
+
+handle_resolution_informational_loop() {
+  local status output_file
+
+  [[ "${LAUNCHER_MODE}" == "resolution" ]] || return 1
+  launcher_can_use_zenity || return 1
+
+  while true; do
+    if [[ "${#GUI_ARGS[@]}" -eq 1 && "${GUI_ARGS[0]}" == "--pause-on-error" ]]; then
+      if ! collect_resolution_gui_args; then
+        print_line 'Islem iptal edildi.\n'
+        pause_before_exit
+        exit 0
+      fi
+    fi
+
+    if ! resolution_action_is_informational; then
+      return 1
+    fi
+
+    cleanup_run_report_file
+    if ! prepare_run_report_file; then
+      print_line 'HATA: Rapor dosyasi hazirlanamadi.\n'
+      pause_before_exit
+      exit 1
+    fi
+
+    output_file="$(mktemp)"
+    run_main_capture_with_privileges "${output_file}"
+    status="$?"
+    show_resolution_informational_dialog "${status}" "${output_file}"
+    rm -f "${output_file}"
+    cleanup_run_report_file
+
+    GUI_ARGS=(--pause-on-error)
+  done
+}
+
+handle_eta_kayit_informational_loop() {
+  local status output_file
+
+  [[ "${LAUNCHER_MODE}" == "eta-kayit-repair" ]] || return 1
+  launcher_can_use_zenity || return 1
+
+  while true; do
+    if [[ "${#GUI_ARGS[@]}" -eq 1 && "${GUI_ARGS[0]}" == "--pause-on-error" ]]; then
+      if ! collect_eta_kayit_repair_gui_args; then
+        print_line 'Islem iptal edildi.\n'
+        pause_before_exit
+        exit 0
+      fi
+    fi
+
+    if ! eta_kayit_action_is_informational; then
+      return 1
+    fi
+
+    cleanup_run_report_file
+    if ! prepare_run_report_file; then
+      print_line 'HATA: Rapor dosyasi hazirlanamadi.\n'
+      pause_before_exit
+      exit 1
+    fi
+
+    output_file="$(mktemp)"
+    run_main_capture_with_privileges "${output_file}"
+    status="$?"
+    show_eta_kayit_informational_dialog "${status}" "${output_file}"
+    rm -f "${output_file}"
+    cleanup_run_report_file
 
     GUI_ARGS=(--pause-on-error)
   done
@@ -639,6 +1248,7 @@ first_install_checklist_force_disabled_on_select_all() {
 init_first_install_checklist() {
   FIRST_INSTALL_CHECKLIST_CODES=(
     hostname
+    eta_kayit
     remove_ogrenci
     remove_ogretmen
     eag
@@ -651,14 +1261,14 @@ init_first_install_checklist() {
     idle_shutdown
     scheduled_shutdown
     admin_password
-    eta_kayit
   )
 
   FIRST_INSTALL_CHECKLIST_LABELS=(
     "Tahta adini degistir"
+    "Kurulum sonunda ETA Kayit uygulamasini ac"
     "ogrenci kullanicisini sil"
     "ogretmen kullanicisini sil"
-    "e-ag-client paketini kur"
+    "e-ag-client (Ag Kontrol istemci) paketini kur"
     "eta-qr-login paketini kur"
     "Kurulu sistem paketlerini guncelle (apt update + apt upgrade)"
     "Dokunmatik surucusunu guncellemeyi engelle (paket guncellemede de)"
@@ -668,7 +1278,6 @@ init_first_install_checklist() {
     "Bosta kalinca otomatik kapat"
     "Her gun belirli saatte kapat"
     "etapadmin parolasini degistir"
-    "Kurulum sonunda ETA Kayit uygulamasini ac"
   )
 
   FIRST_INSTALL_CHECKLIST_STATES=(
@@ -995,7 +1604,7 @@ collect_touchdrv_gui_args() {
     --column="Sec" \
     --column="Kod" \
     --column="Aciklama" \
-    TRUE touchdrv_upgrade "Tum sistemi ve Dokunmatik Surucuyu Guncelle" \
+    FALSE touchdrv_upgrade "Tum sistemi ve Dokunmatik Surucuyu Guncelle" \
     FALSE touchdrv_only_upgrade "Tum sistemi degil yalnizca Dokunmatik Surucusunu Guncelle" \
     FALSE touchdrv_check "Dokunmatik Surucusunu Kontrol Et" \
     FALSE touchdrv_rollback "Eski Dokunmatik Surucusunu Geri Yukle (${ETA_TOUCHDRV_FALLBACK_VERSION})")" || return 1
@@ -1072,7 +1681,7 @@ collect_touch_calibration_gui_args() {
     --column="Sec" \
     --column="Kod" \
     --column="Aciklama" \
-    TRUE touch_calibration_start "Dokunmatik Kalibrasyonunu Baslat" \
+    FALSE touch_calibration_start "Dokunmatik Kalibrasyonunu Baslat" \
     FALSE touch_calibration_status "Kalibrasyon Durumunu Goster" \
     FALSE touch_calibration_reset "Kayitli Kalibrasyonu Sifirla")" || return 1
 
@@ -1134,12 +1743,13 @@ collect_eta_kayit_repair_gui_args() {
   selection="$(zenity --list \
     --radiolist \
     --title="ETA Kayit duzelt/sifirla" \
-    --text="Ahenk onarimi icin islemi secin" \
+    --text="ETA Kayit icin islemi secin" \
     --width=780 \
-    --height=360 \
+    --height=400 \
     --column="Sec" \
     --column="Kod" \
     --column="Aciklama" \
+    FALSE eta_kayit_preflight "ETA Kayit on kontrol raporu olustur" \
     FALSE eta_kayit_repair "Ahenk onar" \
     FALSE eta_kayit_repair_reinstall "Ahenk onar ve kayit bilesenlerini yeniden kur" \
     FALSE eta_kayit_repair_full_upgrade "Ahenk onar, kayit bilesenlerini yeniden kur ve son care olarak tum paketleri guncelle")" || return 1
@@ -1147,6 +1757,9 @@ collect_eta_kayit_repair_gui_args() {
   GUI_ARGS=(--non-interactive --pause-on-error)
 
   case "${selection}" in
+    eta_kayit_preflight)
+      GUI_ARGS+=(--eta-kayit-preflight)
+      ;;
     eta_kayit_repair)
       GUI_ARGS+=(--eta-kayit-repair)
       ;;
@@ -1167,9 +1780,10 @@ collect_eta_kayit_repair_cli_args() {
 
   while true; do
     print_line "$(launcher_mode_label)\n"
-    print_line '  1) Ahenk onar\n'
-    print_line '  2) Ahenk onar ve kayit bilesenlerini yeniden kur\n'
-    print_line '  3) Ahenk onar, kayit bilesenlerini yeniden kur ve son care olarak tum paketleri guncelle\n'
+    print_line '  1) ETA Kayit on kontrol raporu olustur\n'
+    print_line '  2) Ahenk onar\n'
+    print_line '  3) Ahenk onar ve kayit bilesenlerini yeniden kur\n'
+    print_line '  4) Ahenk onar, kayit bilesenlerini yeniden kur ve son care olarak tum paketleri guncelle\n'
     print_line 'Seciminiz: '
     choice="$(read_line_from_user || true)"
 
@@ -1177,19 +1791,343 @@ collect_eta_kayit_repair_cli_args() {
 
     case "${choice}" in
       1)
-        GUI_ARGS+=(--eta-kayit-repair)
+        GUI_ARGS+=(--eta-kayit-preflight)
         return 0
         ;;
       2)
-        GUI_ARGS+=(--eta-kayit-repair-reinstall-ahenk)
+        GUI_ARGS+=(--eta-kayit-repair)
         return 0
         ;;
       3)
+        GUI_ARGS+=(--eta-kayit-repair-reinstall-ahenk)
+        return 0
+        ;;
+      4)
         GUI_ARGS+=(--eta-kayit-repair-full-upgrade)
         return 0
         ;;
       *)
-        print_line 'Gecersiz secim. Lutfen 1, 2 veya 3 girin.\n\n'
+        print_line 'Gecersiz secim. Lutfen 1 ile 4 arasinda bir deger girin.\n\n'
+        ;;
+    esac
+  done
+}
+
+list_launcher_usb_storage_devices() {
+  local line name transport model
+
+  command -v lsblk >/dev/null 2>&1 || return 1
+
+  while IFS= read -r line; do
+    name="$(printf '%s\n' "${line}" | sed -n 's/.*NAME="\([^"]*\)".*/\1/p')"
+    transport="$(printf '%s\n' "${line}" | sed -n 's/.*TRAN="\([^"]*\)".*/\1/p')"
+    model="$(printf '%s\n' "${line}" | sed -n 's/.*MODEL="\([^"]*\)".*/\1/p')"
+    [[ "${transport}" == "usb" && -n "${name}" ]] || continue
+    printf '/dev/%s|%s\n' "${name}" "${model}"
+  done < <(lsblk -S -n -P -o NAME,TRAN,MODEL 2>/dev/null)
+}
+
+prompt_usb_target_gui() {
+  local devices=()
+  local entry device_node device_model device_label
+  local selected=""
+
+  while IFS= read -r entry; do
+    device_node="${entry%%|*}"
+    device_model="${entry#*|}"
+    [[ -n "${device_node}" ]] || continue
+    device_label="${device_node}"
+    if [[ -n "${device_model}" ]]; then
+      device_label="${device_label} - ${device_model}"
+    fi
+    devices+=(FALSE "${device_node}" "${device_label}")
+  done < <(list_launcher_usb_storage_devices || true)
+
+  if ((${#devices[@]} == 0)); then
+    zenity --warning --title="USB Aygiti Bulunamadi" --text="Bagli USB depolama aygiti bulunamadi." || true
+    return 1
+  fi
+
+  selected="$(zenity --list \
+    --radiolist \
+    --title="USB Aygiti Sec" \
+    --text="Onarmak istediginiz USB depolama aygitini secin" \
+    --width=760 \
+    --height=360 \
+    --column="Sec" \
+    --column="Aygit" \
+    --column="Aciklama" \
+    "${devices[@]}")" || return 1
+
+  USB_GUI_TARGET="${selected}"
+}
+
+prompt_usb_target_cli() {
+  local entries=()
+  local entry device_node device_model choice index
+
+  while IFS= read -r entry; do
+    entries+=("${entry}")
+  done < <(list_launcher_usb_storage_devices || true)
+
+  if ((${#entries[@]} == 0)); then
+    print_line 'Bagli USB depolama aygiti bulunamadi.\n'
+    return 1
+  fi
+
+  print_line "USB aygitlari:\n"
+  for index in "${!entries[@]}"; do
+    device_node="${entries[index]%%|*}"
+    device_model="${entries[index]#*|}"
+    print_line "  $((index + 1))) ${device_node}"
+    if [[ -n "${device_model}" ]]; then
+      print_line " - ${device_model}"
+    fi
+    print_line "\n"
+  done
+
+  while true; do
+    print_line 'Seciminiz: '
+    choice="$(read_line_from_user || true)"
+    if [[ "${choice}" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#entries[@]} )); then
+      USB_GUI_TARGET="${entries[choice-1]%%|*}"
+      return 0
+    fi
+    print_line 'Gecersiz secim.\n\n'
+  done
+}
+
+collect_service_health_gui_args() {
+  local selection
+
+  selection="$(zenity --list \
+    --radiolist \
+    --title="Servis Saglik Paneli" \
+    --text="Yapmak istediginiz islemi secin" \
+    --width=820 \
+    --height=420 \
+    --column="Sec" \
+    --column="Kod" \
+    --column="Aciklama" \
+    FALSE service_health_check "Temel servis ve timer durum raporunu olustur" \
+    FALSE restart_touchdrv "ETA dokunmatik surucusu servisini yeniden baslat" \
+    FALSE restart_network "Ag yoneticisini yeniden baslat" \
+    FALSE restart_cups "Yazici servisini yeniden baslat" \
+    FALSE restart_idle_timer "Bosta kapanma timerini yeniden baslat" \
+    FALSE restart_scheduled_timer "Planli kapanma timerini yeniden baslat")" || return 1
+
+  GUI_ARGS=(--non-interactive --pause-on-error)
+
+  case "${selection}" in
+    service_health_check)
+      GUI_ARGS+=(--service-health-check)
+      ;;
+    restart_touchdrv)
+      GUI_ARGS+=(--service-health-restart eta-touchdrv.service)
+      ;;
+    restart_network)
+      GUI_ARGS+=(--service-health-restart NetworkManager.service)
+      ;;
+    restart_cups)
+      GUI_ARGS+=(--service-health-restart cups.service)
+      ;;
+    restart_idle_timer)
+      GUI_ARGS+=(--service-health-restart etap-idle-shutdown.timer)
+      ;;
+    restart_scheduled_timer)
+      GUI_ARGS+=(--service-health-restart etap-scheduled-poweroff.timer)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+collect_service_health_cli_args() {
+  local choice
+
+  while true; do
+    print_line 'Servis Saglik Paneli\n'
+    print_line '  1) Temel servis ve timer durum raporunu olustur\n'
+    print_line '  2) ETA dokunmatik surucusu servisini yeniden baslat\n'
+    print_line '  3) Ag yoneticisini yeniden baslat\n'
+    print_line '  4) Yazici servisini yeniden baslat\n'
+    print_line '  5) Bosta kapanma timerini yeniden baslat\n'
+    print_line '  6) Planli kapanma timerini yeniden baslat\n'
+    print_line 'Seciminiz: '
+    choice="$(read_line_from_user || true)"
+
+    GUI_ARGS=(--non-interactive --pause-on-error)
+
+    case "${choice}" in
+      1)
+        GUI_ARGS+=(--service-health-check)
+        return 0
+        ;;
+      2)
+        GUI_ARGS+=(--service-health-restart eta-touchdrv.service)
+        return 0
+        ;;
+      3)
+        GUI_ARGS+=(--service-health-restart NetworkManager.service)
+        return 0
+        ;;
+      4)
+        GUI_ARGS+=(--service-health-restart cups.service)
+        return 0
+        ;;
+      5)
+        GUI_ARGS+=(--service-health-restart etap-idle-shutdown.timer)
+        return 0
+        ;;
+      6)
+        GUI_ARGS+=(--service-health-restart etap-scheduled-poweroff.timer)
+        return 0
+        ;;
+      *)
+        print_line 'Gecersiz secim. Lutfen 1 ile 6 arasinda bir deger girin.\n\n'
+        ;;
+    esac
+  done
+}
+
+collect_usb_repair_gui_args() {
+  local selection
+
+  selection="$(zenity --list \
+    --radiolist \
+    --title="USB Onarim Araci" \
+    --text="Yapmak istediginiz islemi secin" \
+    --width=780 \
+    --height=320 \
+    --column="Sec" \
+    --column="Kod" \
+    --column="Aciklama" \
+    FALSE usb_report "Bagli USB depolama aygitlarini raporla" \
+    FALSE usb_repair "Secilen USB depolama aygitini onar")" || return 1
+
+  GUI_ARGS=(--non-interactive --pause-on-error)
+
+  case "${selection}" in
+    usb_report)
+      GUI_ARGS+=(--usb-report)
+      ;;
+    usb_repair)
+      prompt_usb_target_gui || return 1
+      if ! zenity --question \
+        --title="USB Onarim Onayi" \
+        --width=480 \
+        --text="${USB_GUI_TARGET} icin dosya sistemi onarimi denenecek.\nBagli bolumler ayri baglanir. Devam edilsin mi?"; then
+        return 1
+      fi
+      GUI_ARGS+=(--usb-repair "${USB_GUI_TARGET}")
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+collect_usb_repair_cli_args() {
+  local choice
+
+  while true; do
+    print_line 'USB Onarim Araci\n'
+    print_line '  1) Bagli USB depolama aygitlarini raporla\n'
+    print_line '  2) Secilen USB depolama aygitini onar\n'
+    print_line 'Seciminiz: '
+    choice="$(read_line_from_user || true)"
+
+    GUI_ARGS=(--non-interactive --pause-on-error)
+
+    case "${choice}" in
+      1)
+        GUI_ARGS+=(--usb-report)
+        return 0
+        ;;
+      2)
+        prompt_usb_target_cli || return 1
+        GUI_ARGS+=(--usb-repair "${USB_GUI_TARGET}")
+        return 0
+        ;;
+      *)
+        print_line 'Gecersiz secim. Lutfen 1 veya 2 girin.\n\n'
+        ;;
+    esac
+  done
+}
+
+collect_resolution_gui_args() {
+  local selection
+
+  selection="$(zenity --list \
+    --radiolist \
+    --title="Cozunurluk Profilleri" \
+    --text="Yapmak istediginiz islemi secin" \
+    --width=760 \
+    --height=340 \
+    --column="Sec" \
+    --column="Kod" \
+    --column="Aciklama" \
+    FALSE resolution_status "Bagli ekranlari ve modlari raporla" \
+    FALSE resolution_4k "4K profilini uygula" \
+    FALSE resolution_fhd "FHD profilini uygula" \
+    FALSE resolution_native "Yerel (auto) profili uygula")" || return 1
+
+  GUI_ARGS=(--non-interactive --pause-on-error)
+
+  case "${selection}" in
+    resolution_status)
+      GUI_ARGS+=(--resolution-status)
+      ;;
+    resolution_4k)
+      GUI_ARGS+=(--resolution-profile 4k)
+      ;;
+    resolution_fhd)
+      GUI_ARGS+=(--resolution-profile fhd)
+      ;;
+    resolution_native)
+      GUI_ARGS+=(--resolution-profile native)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+collect_resolution_cli_args() {
+  local choice
+
+  while true; do
+    print_line 'Cozunurluk Profilleri\n'
+    print_line '  1) Bagli ekranlari ve modlari raporla\n'
+    print_line '  2) 4K profilini uygula\n'
+    print_line '  3) FHD profilini uygula\n'
+    print_line '  4) Yerel (auto) profili uygula\n'
+    print_line 'Seciminiz: '
+    choice="$(read_line_from_user || true)"
+
+    GUI_ARGS=(--non-interactive --pause-on-error)
+
+    case "${choice}" in
+      1)
+        GUI_ARGS+=(--resolution-status)
+        return 0
+        ;;
+      2)
+        GUI_ARGS+=(--resolution-profile 4k)
+        return 0
+        ;;
+      3)
+        GUI_ARGS+=(--resolution-profile fhd)
+        return 0
+        ;;
+      4)
+        GUI_ARGS+=(--resolution-profile native)
+        return 0
+        ;;
+      *)
+        print_line 'Gecersiz secim. Lutfen 1 ile 4 arasinda bir deger girin.\n\n'
         ;;
     esac
   done
@@ -1258,6 +2196,44 @@ prompt_wine_gui_form() {
   done
 }
 
+prompt_wine_gui_target_prefix_form() {
+  local title="$1"
+  local text="$2"
+  local default_user="$3"
+  local default_prefix="$4"
+  local form_separator=$'\x1f'
+  local form_values target_user prefix_name
+
+  while true; do
+    form_values="$(zenity --forms \
+      --title="${title}" \
+      --text="${text}" \
+      --width=680 \
+      --separator="${form_separator}" \
+      --add-entry="Hedef Kullanici (bossa: otomatik)" \
+      --add-entry="Wine Prefix Adi (bossa: ${default_prefix})")" || return 1
+
+    IFS="${form_separator}" read -r target_user prefix_name <<<"${form_values}"
+    target_user="$(trim_surrounding_whitespace "${target_user}")"
+    prefix_name="$(trim_surrounding_whitespace "${prefix_name}")"
+
+    WINE_GUI_TARGET_USER="${target_user}"
+    WINE_GUI_PREFIX_NAME="${prefix_name:-${default_prefix}}"
+
+    if ! validate_wine_target_user "${WINE_GUI_TARGET_USER}"; then
+      zenity --error --title="Kullanici Hatasi" --text="Kullanici adi bos olabilir veya yalnizca harf, rakam, tire ve alt cizgi icerebilir." || true
+      continue
+    fi
+
+    if ! validate_wine_prefix_name "${WINE_GUI_PREFIX_NAME}"; then
+      zenity --error --title="Wine Prefix Hatasi" --text="Wine prefix adi tek bir klasor adi olmalidir." || true
+      continue
+    fi
+
+    return 0
+  done
+}
+
 prompt_wine_cli_values() {
   local prompt_user="$1"
   local prompt_windows="$2"
@@ -1311,6 +2287,64 @@ prompt_wine_cli_values() {
   done
 }
 
+prompt_wine_cli_target_prefix_values() {
+  local default_user="$1"
+  local default_prefix="$2"
+  local target_user prefix_name
+
+  while true; do
+    print_line "Hedef kullanici (bossa otomatik${default_user:+: ${default_user}}): "
+    target_user="$(read_line_from_user || true)"
+    target_user="$(trim_surrounding_whitespace "${target_user}")"
+
+    print_line "Wine prefix adi [${default_prefix}]: "
+    prefix_name="$(read_line_from_user || true)"
+    prefix_name="$(trim_surrounding_whitespace "${prefix_name}")"
+    prefix_name="${prefix_name:-${default_prefix}}"
+
+    if ! validate_wine_target_user "${target_user}"; then
+      print_line 'Gecersiz kullanici adi.\n\n'
+      continue
+    fi
+
+    if ! validate_wine_prefix_name "${prefix_name}"; then
+      print_line 'Wine prefix adi tek bir klasor adi olmalidir.\n\n'
+      continue
+    fi
+
+    WINE_GUI_TARGET_USER="${target_user}"
+    WINE_GUI_PREFIX_NAME="${prefix_name}"
+    return 0
+  done
+}
+
+prompt_wine_gui_run_path() {
+  local title="$1"
+  local selected_path=""
+
+  selected_path="$(zenity --file-selection --title="${title}" --width=820 --height=520)" || return 1
+  selected_path="$(trim_surrounding_whitespace "${selected_path}")"
+  [[ -n "${selected_path}" ]] || return 1
+  WINE_GUI_RUN_PATH="${selected_path}"
+}
+
+prompt_wine_cli_run_path() {
+  local label="$1"
+  local run_path=""
+
+  while true; do
+    print_line "${label}: "
+    run_path="$(read_line_from_user || true)"
+    run_path="$(trim_surrounding_whitespace "${run_path}")"
+    if [[ -z "${run_path}" ]]; then
+      print_line 'Dosya yolu bos birakilamaz.\n\n'
+      continue
+    fi
+    WINE_GUI_RUN_PATH="${run_path}"
+    return 0
+  done
+}
+
 append_wine_common_args() {
   GUI_ARGS+=(--wine-prefix-name "${WINE_GUI_PREFIX_NAME}")
 
@@ -1329,15 +2363,19 @@ collect_wine_gui_args() {
     --radiolist \
     --title="ETAP Wine Araci" \
     --text="Yapmak istediginiz Wine islemini secin" \
-    --width=820 \
-    --height=430 \
+    --width=860 \
+    --height=520 \
     --column="Sec" \
     --column="Kod" \
     --column="Aciklama" \
-    TRUE wine_install "Wine ve winetricks kur veya guncelle" \
+    FALSE wine_install "Wine ve winetricks kur veya guncelle" \
     FALSE wine_install_vulkan "Wine kur veya guncelle, dxvk ve vkd3d de ekle" \
     FALSE wine_check "Wine durumunu kontrol et" \
+    FALSE wine_diag "Wine icin ayrintili teshis raporu olustur" \
     FALSE wine_version "Wine ve winetricks surumlerini goster" \
+    FALSE wine_run_exe "EXE dosyasi calistir" \
+    FALSE wine_run_msi "MSI paketi calistir" \
+    FALSE wine_sync_shortcuts "Wine kisayollarini masaustune yeniden senkronla" \
     FALSE winecfg "winecfg ac" \
     FALSE wine_rebuild_prefix "Wine prefix klasorunu yeniden olustur" \
     FALSE wine_remove "Wine paketlerini ve ETAP baslaticilarini kaldir" \
@@ -1371,8 +2409,46 @@ collect_wine_gui_args() {
     wine_check)
       GUI_ARGS+=(--wine-check)
       ;;
+    wine_diag)
+      prompt_wine_gui_target_prefix_form \
+        "Wine Teshis Ayarlari" \
+        "Teshis raporu icin istenirse hedef kullanici ve Wine prefix adini belirtin." \
+        "${default_user}" \
+        "${default_prefix}" || return 1
+      GUI_ARGS+=(--wine-diag)
+      append_wine_common_args
+      ;;
     wine_version)
       GUI_ARGS+=(--wine-version)
+      ;;
+    wine_run_exe)
+      prompt_wine_gui_target_prefix_form \
+        "EXE Calistir" \
+        "EXE dosyasini calistirmak icin hedef kullanici ve Wine prefix adini secin." \
+        "${default_user}" \
+        "${default_prefix}" || return 1
+      prompt_wine_gui_run_path "Calistirilacak EXE dosyasini secin" || return 1
+      GUI_ARGS+=(--wine-run-exe "${WINE_GUI_RUN_PATH}")
+      append_wine_common_args
+      ;;
+    wine_run_msi)
+      prompt_wine_gui_target_prefix_form \
+        "MSI Calistir" \
+        "MSI paketini calistirmak icin hedef kullanici ve Wine prefix adini secin." \
+        "${default_user}" \
+        "${default_prefix}" || return 1
+      prompt_wine_gui_run_path "Calistirilacak MSI dosyasini secin" || return 1
+      GUI_ARGS+=(--wine-run-msi "${WINE_GUI_RUN_PATH}")
+      append_wine_common_args
+      ;;
+    wine_sync_shortcuts)
+      prompt_wine_gui_target_prefix_form \
+        "Wine Kisayol Senkronu" \
+        "Secilen kullanici icin Wine kisayollari masaustune yeniden senkronlanacak." \
+        "${default_user}" \
+        "${default_prefix}" || return 1
+      GUI_ARGS+=(--wine-sync-shortcuts)
+      append_wine_common_args
       ;;
     winecfg)
       prompt_wine_gui_form \
@@ -1436,11 +2512,15 @@ collect_wine_cli_args() {
     print_line '  1) Wine ve winetricks kur veya guncelle\n'
     print_line '  2) Wine kur veya guncelle, dxvk ve vkd3d de ekle\n'
     print_line '  3) Wine durumunu kontrol et\n'
-    print_line '  4) Wine ve winetricks surumlerini goster\n'
-    print_line '  5) winecfg ac\n'
-    print_line '  6) Wine prefix klasorunu yeniden olustur\n'
-    print_line '  7) Wine paketlerini ve ETAP baslaticilarini kaldir\n'
-    print_line '  8) Wine paketlerini kaldir ve prefix klasorlerini de sil\n'
+    print_line '  4) Wine icin ayrintili teshis raporu olustur\n'
+    print_line '  5) Wine ve winetricks surumlerini goster\n'
+    print_line '  6) EXE dosyasi calistir\n'
+    print_line '  7) MSI paketi calistir\n'
+    print_line '  8) Wine kisayollarini masaustune yeniden senkronla\n'
+    print_line '  9) winecfg ac\n'
+    print_line ' 10) Wine prefix klasorunu yeniden olustur\n'
+    print_line ' 11) Wine paketlerini ve ETAP baslaticilarini kaldir\n'
+    print_line ' 12) Wine paketlerini kaldir ve prefix klasorlerini de sil\n'
     print_line 'Seciminiz [1]: '
     choice="$(read_line_from_user || true)"
     choice="${choice:-1}"
@@ -1469,27 +2549,53 @@ collect_wine_cli_args() {
         return 0
         ;;
       4)
-        GUI_ARGS+=(--wine-version)
+        prompt_wine_cli_target_prefix_values "${default_user}" "${default_prefix}"
+        GUI_ARGS+=(--wine-diag)
+        append_wine_common_args
         return 0
         ;;
       5)
+        GUI_ARGS+=(--wine-version)
+        return 0
+        ;;
+      6)
+        prompt_wine_cli_target_prefix_values "${default_user}" "${default_prefix}"
+        prompt_wine_cli_run_path 'Calistirilacak EXE dosya yolu'
+        GUI_ARGS+=(--wine-run-exe "${WINE_GUI_RUN_PATH}")
+        append_wine_common_args
+        return 0
+        ;;
+      7)
+        prompt_wine_cli_target_prefix_values "${default_user}" "${default_prefix}"
+        prompt_wine_cli_run_path 'Calistirilacak MSI dosya yolu'
+        GUI_ARGS+=(--wine-run-msi "${WINE_GUI_RUN_PATH}")
+        append_wine_common_args
+        return 0
+        ;;
+      8)
+        prompt_wine_cli_target_prefix_values "${default_user}" "${default_prefix}"
+        GUI_ARGS+=(--wine-sync-shortcuts)
+        append_wine_common_args
+        return 0
+        ;;
+      9)
         prompt_wine_cli_values 1 0 "${default_user}" "${default_prefix}" "${default_windows}"
         GUI_ARGS+=(--winecfg)
         append_wine_common_args
         return 0
         ;;
-      6)
+      10)
         prompt_wine_cli_values 1 1 "${default_user}" "${default_prefix}" "${default_windows}"
         GUI_ARGS+=(--wine-rebuild-prefix --wine-windows-version "${WINE_GUI_WINDOWS_VERSION}")
         append_wine_common_args
         return 0
         ;;
-      7)
+      11)
         print_line 'Wine paketleri ve ETAP baslaticilari kaldirilacak.\n'
         GUI_ARGS+=(--wine-remove)
         return 0
         ;;
-      8)
+      12)
         print_line 'UYARI: Wine paketleri kaldirilacak ve prefix klasorleri silinecek.\n'
         prompt_wine_cli_values 1 0 "" "${default_prefix}" "${default_windows}"
         GUI_ARGS+=(--wine-remove-purge-prefixes)
@@ -1497,7 +2603,7 @@ collect_wine_cli_args() {
         return 0
         ;;
       *)
-        print_line 'Gecersiz secim. Lutfen 1 ile 8 arasinda bir deger girin.\n\n'
+        print_line 'Gecersiz secim. Lutfen 1 ile 12 arasinda bir deger girin.\n\n'
         ;;
     esac
   done
@@ -1524,6 +2630,15 @@ for arg in "$@"; do
     --eta-kayit-repair-gui)
       LAUNCHER_MODE="eta-kayit-repair"
       ;;
+    --service-health-gui)
+      LAUNCHER_MODE="service-health"
+      ;;
+    --usb-repair-gui)
+      LAUNCHER_MODE="usb-repair"
+      ;;
+    --resolution-gui)
+      LAUNCHER_MODE="resolution"
+      ;;
     *)
       GUI_ARGS+=("${arg}")
       ;;
@@ -1547,6 +2662,22 @@ if [[ "${PAUSE_ON_ERROR_REQUESTED}" != "1" ]]; then
 fi
 
 if handle_wine_informational_loop; then
+  exit 0
+fi
+
+if handle_service_health_informational_loop; then
+  exit 0
+fi
+
+if handle_usb_informational_loop; then
+  exit 0
+fi
+
+if handle_resolution_informational_loop; then
+  exit 0
+fi
+
+if handle_eta_kayit_informational_loop; then
   exit 0
 fi
 
@@ -1591,6 +2722,36 @@ if [[ "${#GUI_ARGS[@]}" -eq 1 && "${GUI_ARGS[0]}" == "--pause-on-error" ]]; then
     else
       collect_eta_kayit_repair_cli_args
     fi
+  elif [[ "${LAUNCHER_MODE}" == "service-health" ]]; then
+    if launcher_can_use_zenity; then
+      if ! collect_service_health_gui_args; then
+        print_line 'Islem iptal edildi.\n'
+        pause_before_exit
+        exit 0
+      fi
+    else
+      collect_service_health_cli_args
+    fi
+  elif [[ "${LAUNCHER_MODE}" == "usb-repair" ]]; then
+    if launcher_can_use_zenity; then
+      if ! collect_usb_repair_gui_args; then
+        print_line 'Islem iptal edildi.\n'
+        pause_before_exit
+        exit 0
+      fi
+    else
+      collect_usb_repair_cli_args
+    fi
+  elif [[ "${LAUNCHER_MODE}" == "resolution" ]]; then
+    if launcher_can_use_zenity; then
+      if ! collect_resolution_gui_args; then
+        print_line 'Islem iptal edildi.\n'
+        pause_before_exit
+        exit 0
+      fi
+    else
+      collect_resolution_cli_args
+    fi
   elif command -v zenity >/dev/null 2>&1 && [[ -n "${DISPLAY:-}" ]]; then
     if ! collect_gui_args; then
       print_line 'Islem iptal edildi.\n'
@@ -1602,7 +2763,11 @@ fi
 
 show_after_1600_notice_if_needed
 prepare_touchdrv_summary_file
-prepare_run_report_file
+if ! prepare_run_report_file; then
+  print_line 'HATA: Rapor dosyasi hazirlanamadi.\n'
+  pause_before_exit
+  exit 1
+fi
 
 if [[ "${EUID}" -eq 0 ]]; then
   run_main "${GUI_ARGS[@]}"

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ETA USB Onarim Araci
+Comment=Bagli USB depolama aygitlarini raporla veya onarmayi dene
+Exec=/bin/sh -c "desktop_file=\$1; script_dir=\$(CDPATH= cd -- \"\$(dirname -- \"\$desktop_file\")\" && pwd); script=\"\$script_dir/usb_onarim_araci.sh\"; if [ ! -x \"\$script\" ]; then printf 'HATA: Betik bulunamadi: %s\n' \"\$script\"; printf 'Pencereyi kapatmadan once Enter tusuna basin...'; read -r _; exit 1; fi; ETAP23_RUNTIME_DIR=\"\$script_dir\" exec \"\$script\" --gui" sh %k
+Icon=drive-removable-media
+Terminal=true
+StartupNotify=true
+Categories=System;Settings;

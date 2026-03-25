@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=ETAP Log ve Rapor Araci
+Comment=Kaydedilen rapor ve gunluk dosyalarini goruntule
+Exec=/bin/sh -c "desktop_file=\$1; script_dir=\$(CDPATH= cd -- \"\$(dirname -- \"\$desktop_file\")\" && pwd); script=\"\$script_dir/log_rapor_araci.sh\"; if [ ! -x \"\$script\" ]; then printf 'HATA: Betik bulunamadi: %s\n' \"\$script\"; printf 'Pencereyi kapatmadan once Enter tusuna basin...'; read -r _; exit 1; fi; ETAP23_RUNTIME_DIR=\"\$script_dir\" exec \"\$script\" --gui" sh %k
+Terminal=true
+Categories=Utility;System;
+Icon=utilities-terminal
+StartupNotify=true

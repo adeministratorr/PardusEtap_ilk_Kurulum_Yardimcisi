@@ -10,6 +10,7 @@ export ETAP23_RUNTIME_DIR
 GUI_MODE=0
 ACTION_FLAG=""
 VULKAN_FLAG=""
+ACTION_VALUE=""
 FORWARDED_ARGS=()
 
 usage() {
@@ -19,8 +20,12 @@ Kullanim:
   sudo ./wine_araci.sh --install
   sudo ./wine_araci.sh --install-vulkan
   sudo ./wine_araci.sh --check
+  sudo ./wine_araci.sh --diag
   sudo ./wine_araci.sh --version
   sudo ./wine_araci.sh --winecfg
+  sudo ./wine_araci.sh --run-exe /dosya/yolu/uygulama.exe
+  sudo ./wine_araci.sh --run-msi /dosya/yolu/kurulum.msi
+  sudo ./wine_araci.sh --sync-shortcuts
   sudo ./wine_araci.sh --rebuild-prefix --wine-user etapadmin
   sudo ./wine_araci.sh --remove
   sudo ./wine_araci.sh --remove-purge-prefixes
@@ -32,14 +37,19 @@ Secenekler:
   --install                 Wine ve winetricks kur veya guncelle
   --install-vulkan          Wine kur/guncelle ve dxvk/vkd3d de ekle
   --check                   Wine durumunu kontrol et
+  --diag                    Wine icin ayrintili teshis raporu olustur
   --version                 Wine ve winetricks surumlerini goster
   --winecfg                 winecfg ac
+  --run-exe DOSYA           Secilen kullanici icin EXE dosyasi calistir
+  --run-msi DOSYA           Secilen kullanici icin MSI paketi calistir
+  --sync-shortcuts          Wine kisayollarini masaustune yeniden senkronla
   --rebuild-prefix          Wine prefix klasorunu yeniden olustur
   --remove                  Wine paketlerini ve ETAP baslaticilarini kaldir
   --remove-purge-prefixes   Wine paketlerini kaldir ve prefix klasorlerini de sil
   --wine-user KULLANICI     Hedef kullanici
   --wine-prefix-name AD     Wine prefix klasor adi
   --wine-windows-version S  Windows surumu
+  --report-file DOSYA       Ciktiyi belirtilen rapor dosyasina da yaz
   --enable-vulkan           dxvk ve vkd3d ekle
   --disable-vulkan          dxvk ve vkd3d ekleme
   --skip-apt-update         apt-get update adimini atla
@@ -79,11 +89,29 @@ parse_args() {
       --check)
         set_action --wine-check
         ;;
+      --diag)
+        set_action --wine-diag
+        ;;
       --version)
         set_action --wine-version
         ;;
       --winecfg)
         set_action --winecfg
+        ;;
+      --run-exe)
+        set_action --wine-run-exe
+        shift
+        [[ $# -gt 0 ]] || fail "--run-exe icin dosya yolu eksik."
+        ACTION_VALUE="$1"
+        ;;
+      --run-msi)
+        set_action --wine-run-msi
+        shift
+        [[ $# -gt 0 ]] || fail "--run-msi icin dosya yolu eksik."
+        ACTION_VALUE="$1"
+        ;;
+      --sync-shortcuts)
+        set_action --wine-sync-shortcuts
         ;;
       --rebuild-prefix)
         set_action --wine-rebuild-prefix
@@ -94,7 +122,7 @@ parse_args() {
       --remove-purge-prefixes)
         set_action --wine-remove-purge-prefixes
         ;;
-      --wine-user|--wine-prefix-name|--wine-windows-version)
+      --wine-user|--wine-prefix-name|--wine-windows-version|--report-file)
         option_name="$1"
         FORWARDED_ARGS+=("${option_name}")
         shift
@@ -138,6 +166,11 @@ main() {
   fi
 
   FORWARDED_ARGS+=("${ACTION_FLAG}")
+
+  if [[ "${ACTION_FLAG}" == "--wine-run-exe" || "${ACTION_FLAG}" == "--wine-run-msi" ]]; then
+    [[ -n "${ACTION_VALUE}" ]] || fail "Wine dosya yolu belirlenemedi."
+    FORWARDED_ARGS+=("${ACTION_VALUE}")
+  fi
 
   if [[ "${ACTION_FLAG}" == "--wine-install" ]]; then
     if [[ -z "${VULKAN_FLAG}" ]]; then

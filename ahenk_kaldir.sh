@@ -11,11 +11,14 @@ REINSTALL_AHENK=0
 FULL_UPGRADE=0
 SKIP_APT_UPDATE=0
 GUI_MODE=0
+PREFLIGHT=0
+REPORT_FILE=""
 
 usage() {
   cat <<'EOF'
 Kullanim:
   sudo ./ahenk_kaldir.sh
+  sudo ./ahenk_kaldir.sh --preflight
   sudo ./ahenk_kaldir.sh --reinstall-ahenk
   sudo ./ahenk_kaldir.sh --full-upgrade
   sudo ./ahenk_kaldir.sh --skip-apt-update
@@ -24,9 +27,11 @@ Kullanim:
 Bu sarmalayici, islemi setup_etap23.sh icindeki merkezi bakim moduna yonlendirir.
 
 Secenekler:
+  --preflight          ETA Kayit oncesi on kontrol raporu olustur
   --reinstall-ahenk   Temizlikten sonra ahenk paketini yeniden kur
   --full-upgrade      Temizlikten sonra ahenk paketini yeniden kur ve tum paketleri guncelle
   --skip-apt-update   apt-get update adimini atla
+  --report-file DOSYA Ciktiyi belirtilen rapor dosyasina da yaz
   --gui               Grafik arayuz ile ETA Kayit duzelt/sifirla akisini ac
   -h, --help          Bu yardimi goster
 EOF
@@ -40,6 +45,9 @@ fail() {
 parse_args() {
   while (($#)); do
     case "$1" in
+      --preflight)
+        PREFLIGHT=1
+        ;;
       --reinstall-ahenk)
         REINSTALL_AHENK=1
         ;;
@@ -48,6 +56,11 @@ parse_args() {
         ;;
       --skip-apt-update)
         SKIP_APT_UPDATE=1
+        ;;
+      --report-file)
+        shift
+        [[ $# -gt 0 ]] || fail "--report-file icin dosya yolu eksik."
+        REPORT_FILE="$1"
         ;;
       --gui)
         GUI_MODE=1
@@ -72,6 +85,15 @@ main() {
 
   if ((GUI_MODE)); then
     [[ -x "${LAUNCHER_SCRIPT}" ]] || fail "Baslatici bulunamadi veya calistirilabilir degil: ${LAUNCHER_SCRIPT}"
+    if ((PREFLIGHT)); then
+      if [[ -n "${REPORT_FILE}" ]]; then
+        exec "${LAUNCHER_SCRIPT}" --eta-kayit-repair-gui --eta-kayit-preflight --report-file "${REPORT_FILE}"
+      fi
+      exec "${LAUNCHER_SCRIPT}" --eta-kayit-repair-gui --eta-kayit-preflight
+    fi
+    if [[ -n "${REPORT_FILE}" ]]; then
+      exec "${LAUNCHER_SCRIPT}" --eta-kayit-repair-gui --report-file "${REPORT_FILE}"
+    fi
     exec "${LAUNCHER_SCRIPT}" --eta-kayit-repair-gui
   fi
 
@@ -79,7 +101,13 @@ main() {
     forwarded_args+=(--skip-apt-update)
   fi
 
-  if ((FULL_UPGRADE)); then
+  if [[ -n "${REPORT_FILE}" ]]; then
+    forwarded_args+=(--report-file "${REPORT_FILE}")
+  fi
+
+  if ((PREFLIGHT)); then
+    forwarded_args+=(--eta-kayit-preflight)
+  elif ((FULL_UPGRADE)); then
     forwarded_args+=(--eta-kayit-repair-full-upgrade)
   elif ((REINSTALL_AHENK)); then
     forwarded_args+=(--eta-kayit-repair-reinstall-ahenk)

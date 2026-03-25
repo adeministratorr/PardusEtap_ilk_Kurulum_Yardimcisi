@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EAG_DEB="${EAG_DEB:-${SCRIPT_DIR}/e-ag-client_2.9.3_amd64.deb}"
+EAG_DEB="${EAG_DEB:-${SCRIPT_DIR}/e-ag-client_2.9.4.0_amd64.deb}"
 ETAP23_RUNTIME_DIR="${ETAP23_RUNTIME_DIR:-${SCRIPT_DIR}}"
 ETAPADMIN_USER="${ETAPADMIN_USER:-etapadmin}"
 BOARD_NAME="${BOARD_NAME:-}"
@@ -12,6 +12,10 @@ WINETRICKS_PACKAGES="${WINETRICKS_PACKAGES:-renderer=gl allfonts corefonts liber
 ENABLE_WINE_VULKAN_TRANSLATORS="${ENABLE_WINE_VULKAN_TRANSLATORS:-0}"
 WINETRICKS_VULKAN_PACKAGES="${WINETRICKS_VULKAN_PACKAGES:-dxvk vkd3d}"
 WINE_TARGET_USER="${WINE_TARGET_USER:-}"
+WINE_RUN_PATH="${WINE_RUN_PATH:-}"
+SERVICE_HEALTH_TARGET="${SERVICE_HEALTH_TARGET:-}"
+USB_REPAIR_TARGET="${USB_REPAIR_TARGET:-}"
+RESOLUTION_PROFILE_TARGET="${RESOLUTION_PROFILE_TARGET:-}"
 IDLE_SHUTDOWN_MINUTES="${IDLE_SHUTDOWN_MINUTES:-90}"
 SCHEDULED_SHUTDOWN_TIME="${SCHEDULED_SHUTDOWN_TIME:-17:20}"
 # Kurulumun sonunda atanacak yeni etapadmin parolasi; bos ise degisim adimi atlanir.
@@ -62,6 +66,9 @@ CURRENT_STEP=""
 CHECK_WARNINGS=0
 PAUSE_ON_ERROR="${PAUSE_ON_ERROR:-0}"
 ETAP23_USER_SUMMARY_FILE="${ETAP23_USER_SUMMARY_FILE:-}"
+ETAP23_REPORT_FILE="${ETAP23_REPORT_FILE:-}"
+ETAP23_LAUNCHER_CAPTURES_REPORT="${ETAP23_LAUNCHER_CAPTURES_REPORT:-0}"
+ETAP23_REPORT_CAPTURE_STARTED=0
 ETA_TOUCHDRV_STATE_INSTALLED_VERSION=""
 ETA_TOUCHDRV_STATE_CANDIDATE_VERSION=""
 ETA_TOUCHDRV_STATE_SERVICE_STATE=""
@@ -83,6 +90,7 @@ Genel secenekler:
   --interactive                     Etkilesimli kurulum sihirbazini zorla
   --non-interactive                 Soru sormadan mevcut degiskenlerle ilerle
   --pause-on-error                  Hata durumunda pencereyi kapatmadan once tusa basilmadini bekle
+  --report-file DOSYA               Ciktiyi belirtilen rapor dosyasina da yaz
   --skip-apt-update                 apt-get update adimini atla
   --touchdrv-upgrade                Yalnizca yeni dokunmatik surucusunu kur/guncelle
   --touchdrv-only-upgrade           Tum sistemi degil yalnizca mevcut dokunmatik surucusunu guncelle
@@ -93,11 +101,22 @@ Genel secenekler:
   --touch-calibration-reset         Kayitli dokunmatik kalibrasyonunu sifirla
   --wine-install                    Yalnizca Wine ve winetricks kur/guncelle
   --wine-check                      Wine komutlari, baslaticilar ve prefix durumunu kontrol et
+  --wine-diag                       Wine icin ayrintili teshis raporu olustur
   --wine-version                    Kurulu Wine ve winetricks surumlerini goster
   --winecfg                         Aktif grafik oturumundaki kullanici icin winecfg ac
+  --wine-run-exe DOSYA              Secilen kullanici icin EXE dosyasi calistir
+  --wine-run-msi DOSYA              Secilen kullanici icin MSI paketi calistir
+  --wine-sync-shortcuts             Secilen kullanici icin Wine kisayollarini yeniden senkronla
   --wine-remove                     Wine paketlerini ve ETAP baslaticilarini kaldir
   --wine-remove-purge-prefixes      Wine paketlerini kaldir ve Wine prefix klasorlerini de sil
   --wine-rebuild-prefix             Secilen kullanici icin Wine prefix klasorunu yeniden olustur
+  --service-health-check            Temel servis ve timer durumlarini raporla
+  --service-health-restart BIRIM    Desteklenen servis veya timer'i yeniden baslat
+  --usb-report                      Bagli USB depolama aygitlarini raporla
+  --usb-repair AYGIT                Secilen USB depolama aygitini onarmayi dene
+  --resolution-status               Ekran cikislari ve cozumunurluk modlarini raporla
+  --resolution-profile PROFIL       4k, fhd veya native profilini uygula
+  --eta-kayit-preflight             ETA Kayit oncesi on kontrol ve rapor olustur
   --eta-kayit-repair                ETA Kayit icin eta-register kur/guncelle, ahenk kaydini temizle
   --eta-kayit-repair-reinstall-ahenk
                                     ETA Kayit onarimi yap ve sonunda ahenk paketini yeniden kur
@@ -112,8 +131,8 @@ Islem secenekleri:
   --keep-ogrenci                    ogrenci kullanicisini silme
   --remove-ogretmen                 ogretmen kullanicisini sil
   --keep-ogretmen                   ogretmen kullanicisini silme
-  --install-eag-client              e-ag-client paketini kur
-  --skip-eag-client                 e-ag-client paketini kurma
+  --install-eag-client              Yerel e-ag-client (Ag Kontrol istemci) paketini kur
+  --skip-eag-client                 Yerel e-ag-client (Ag Kontrol istemci) paketini kurma
   --install-eta-qr-login            eta-qr-login paketini kur
   --skip-eta-qr-login               eta-qr-login paketini kurma
   --upgrade-packages                Kurulu sistem paketlerini guncelle
@@ -137,10 +156,16 @@ Wine secenekleri:
   --wine-prefix-name AD             Kullanici ev dizinindeki Wine klasor adi
   --wine-user KULLANICI             Wine bakim modlarinda hedef kullanici
   --wine-windows-version SURUM      winetricks Windows surumu
+  --wine-run-path DOSYA             Wine ile calistirilacak dosya yolu
   --winetricks-packages LISTE       Boslukla ayrilmis varsayilan winetricks listesi
   --enable-wine-vulkan              dxvk ve vkd3d kur
   --disable-wine-vulkan             dxvk ve vkd3d kurma
   --wine-vulkan-packages LISTE      Vulkan tabanli winetricks listesi
+
+Servis, USB ve ekran secenekleri:
+  --service-health-target BIRIM     Servis saglik kipinde hedef sistemd birimi
+  --usb-target AYGIT                USB onarim kipinde hedef aygit yolu
+  --resolution-profile-target CIKIS Cozumunurluk profili icin hedef ekran cikisi
 
 Guc yonetimi secenekleri:
   --enable-idle-shutdown            Bosta kalinca otomatik kapat
@@ -155,6 +180,7 @@ Guc yonetimi secenekleri:
 Ortam degiskenleri:
   INTERACTIVE_MODE
   PAUSE_ON_ERROR
+  ETAP23_REPORT_FILE
   BOARD_NAME
   EAG_DEB
   ETAPADMIN_USER
@@ -176,6 +202,10 @@ Ortam degiskenleri:
   WINETRICKS_PACKAGES
   ENABLE_WINE_VULKAN_TRANSLATORS
   WINETRICKS_VULKAN_PACKAGES
+  WINE_RUN_PATH
+  SERVICE_HEALTH_TARGET
+  USB_REPAIR_TARGET
+  RESOLUTION_PROFILE_TARGET
   IDLE_SHUTDOWN_MINUTES
   SCHEDULED_SHUTDOWN_TIME
   ENABLE_HOSTNAME_CHANGE
@@ -216,6 +246,180 @@ clear_user_summary() {
 append_user_summary_line() {
   [[ -n "${ETAP23_USER_SUMMARY_FILE}" ]] || return 0
   printf '%s\n' "$*" >>"${ETAP23_USER_SUMMARY_FILE}" 2>/dev/null || true
+}
+
+action_mode_generates_report_by_default() {
+  case "${ACTION_MODE}" in
+    touchdrv-check|touch-calibration-status|wine-check|wine-diag|eta-kayit-preflight|service-health-check|usb-report|resolution-status)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+sanitize_report_slug() {
+  local raw_value="$1"
+  local normalized=""
+
+  normalized="$(printf '%s' "${raw_value}" |
+    tr '[:upper:]' '[:lower:]' |
+    sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g')"
+  [[ -n "${normalized}" ]] || normalized="etap23-rapor"
+  printf '%s\n' "${normalized}"
+}
+
+normalize_report_path() {
+  local report_path="$1"
+
+  [[ "${report_path}" == /* ]] || report_path="$(pwd -P)/${report_path}"
+  printf '%s\n' "${report_path}"
+}
+
+ensure_report_output_dir() {
+  local target_dir="${ETAP23_RUNTIME_DIR}"
+
+  if [[ ! -d "${target_dir}" ]]; then
+    mkdir -p "${target_dir}" 2>/dev/null || true
+  fi
+
+  if [[ -d "${target_dir}" && -w "${target_dir}" ]]; then
+    printf '%s\n' "${target_dir}"
+    return 0
+  fi
+
+  target_dir="/tmp/etap23-reports"
+  mkdir -p "${target_dir}" || fail "Rapor klasoru olusturulamadi: ${target_dir}"
+  chmod 700 "${target_dir}" 2>/dev/null || true
+  printf '%s\n' "${target_dir}"
+}
+
+create_control_report_file() {
+  local report_dir slug
+
+  report_dir="$(ensure_report_output_dir)"
+  slug="$(sanitize_report_slug "${1:-${ACTION_MODE}}")"
+  mktemp "${report_dir}/rapor-${slug}.XXXXXX.log"
+}
+
+prepare_report_destination() {
+  local report_dir
+
+  if [[ -n "${ETAP23_REPORT_FILE}" ]]; then
+    ETAP23_REPORT_FILE="$(normalize_report_path "${ETAP23_REPORT_FILE}")"
+    report_dir="$(dirname "${ETAP23_REPORT_FILE}")"
+    mkdir -p "${report_dir}" 2>/dev/null || fail "Rapor klasoru olusturulamadi: ${report_dir}"
+    if [[ "${ETAP23_LAUNCHER_CAPTURES_REPORT}" != "1" ]]; then
+      : >"${ETAP23_REPORT_FILE}" || fail "Rapor dosyasi hazirlanamadi: ${ETAP23_REPORT_FILE}"
+    fi
+    chmod 600 "${ETAP23_REPORT_FILE}" 2>/dev/null || true
+    printf '%s\n' "${ETAP23_REPORT_FILE}"
+    return 0
+  fi
+
+  action_mode_generates_report_by_default || return 0
+
+  ETAP23_REPORT_FILE="$(create_control_report_file "${ACTION_MODE}")"
+  chmod 600 "${ETAP23_REPORT_FILE}" 2>/dev/null || true
+  printf '%s\n' "${ETAP23_REPORT_FILE}"
+}
+
+current_reported_board_name() {
+  local board_name=""
+
+  board_name="$(current_hostname 2>/dev/null || true)"
+  [[ -n "${board_name}" ]] || board_name="okunamadi"
+  printf '%s\n' "${board_name}"
+}
+
+current_reported_ip_addresses() {
+  local summary="" line iface address fallback_ips=""
+
+  if command -v ip >/dev/null 2>&1; then
+    while IFS= read -r line; do
+      iface="$(printf '%s\n' "${line}" | awk '{print $2}')"
+      address="$(printf '%s\n' "${line}" | awk '{print $4}')"
+      iface="${iface%@*}"
+      address="${address%%/*}"
+      [[ -n "${iface}" && -n "${address}" ]] || continue
+      [[ -z "${summary}" ]] || summary+=", "
+      summary+="${iface}=${address}"
+    done < <(ip -o -4 addr show up scope global 2>/dev/null || true)
+  fi
+
+  if [[ -z "${summary}" ]] && command -v hostname >/dev/null 2>&1; then
+    fallback_ips="$(hostname -I 2>/dev/null || true)"
+    fallback_ips="$(printf '%s' "${fallback_ips}" | tr -s '[:space:]' ' ' | sed -E 's/^ +//; s/ +$//')"
+    [[ -n "${fallback_ips}" ]] && summary="${fallback_ips}"
+  fi
+
+  [[ -n "${summary}" ]] || summary="okunamadi"
+  printf '%s\n' "${summary}"
+}
+
+current_reported_mac_addresses() {
+  local summary="" line iface mac_address=""
+
+  if command -v ip >/dev/null 2>&1; then
+    while IFS= read -r line; do
+      iface="$(printf '%s\n' "${line}" | awk '{print $2}')"
+      iface="${iface%:}"
+      iface="${iface%@*}"
+      [[ "${iface}" == "lo" ]] && continue
+      mac_address="$(printf '%s\n' "${line}" | sed -nE 's/.*link\/ether ([0-9a-f:]{17}).*/\1/p')"
+      [[ -n "${mac_address}" ]] || continue
+      [[ -z "${summary}" ]] || summary+=", "
+      summary+="${iface}=${mac_address}"
+    done < <(ip -o link show 2>/dev/null || true)
+  fi
+
+  [[ -n "${summary}" ]] || summary="okunamadi"
+  printf '%s\n' "${summary}"
+}
+
+report_context_header_already_present() {
+  [[ -n "${ETAP23_REPORT_FILE}" && -f "${ETAP23_REPORT_FILE}" ]] || return 1
+  grep -Eq '^Tahta Adi: ' "${ETAP23_REPORT_FILE}" &&
+    grep -Eq '^MAC Adresi: ' "${ETAP23_REPORT_FILE}" &&
+    grep -Eq '^IP Adresi: ' "${ETAP23_REPORT_FILE}"
+}
+
+emit_report_context_header_if_needed() {
+  local board_name="" mac_addresses="" ip_addresses=""
+
+  [[ -n "${ETAP23_REPORT_FILE}" ]] || return 0
+  report_context_header_already_present && return 0
+
+  board_name="$(current_reported_board_name)"
+  mac_addresses="$(current_reported_mac_addresses)"
+  ip_addresses="$(current_reported_ip_addresses)"
+
+  printf 'Tahta Adi: %s\n' "${board_name}"
+  printf 'MAC Adresi: %s\n' "${mac_addresses}"
+  printf 'IP Adresi: %s\n' "${ip_addresses}"
+  printf '\n'
+}
+
+enable_auto_report_capture_if_needed() {
+  local report_path=""
+
+  report_path="$(prepare_report_destination)"
+  [[ -n "${report_path}" ]] || return 0
+  ETAP23_REPORT_FILE="${report_path}"
+
+  if [[ "${ETAP23_LAUNCHER_CAPTURES_REPORT}" == "1" ]]; then
+    emit_report_context_header_if_needed
+    log "Rapor dosyasi: ${ETAP23_REPORT_FILE}"
+    return 0
+  fi
+
+  [[ "${ETAP23_REPORT_CAPTURE_STARTED}" == "1" ]] && return 0
+
+  exec > >(tee -a "${ETAP23_REPORT_FILE}") 2>&1
+  ETAP23_REPORT_CAPTURE_STARTED=1
+  emit_report_context_header_if_needed
+  log "Rapor dosyasi: ${ETAP23_REPORT_FILE}"
 }
 
 create_script_log_file() {
@@ -367,8 +571,20 @@ action_mode_is_wine_maintenance() {
   [[ "${ACTION_MODE}" == winecfg || "${ACTION_MODE}" == wine-* ]]
 }
 
+action_mode_is_service_health() {
+  [[ "${ACTION_MODE}" == service-health-* ]]
+}
+
+action_mode_is_usb_repair() {
+  [[ "${ACTION_MODE}" == usb-* ]]
+}
+
+action_mode_is_resolution_profiles() {
+  [[ "${ACTION_MODE}" == resolution-* ]]
+}
+
 action_mode_is_eta_kayit_repair() {
-  [[ "${ACTION_MODE}" == eta-kayit-repair* ]]
+  [[ "${ACTION_MODE}" == eta-kayit-preflight || "${ACTION_MODE}" == eta-kayit-repair* ]]
 }
 
 is_interactive_session() {
@@ -499,6 +715,11 @@ parse_args() {
       --pause-on-error)
         PAUSE_ON_ERROR=1
         ;;
+      --report-file)
+        shift
+        [[ $# -gt 0 ]] || fail "--report-file icin dosya yolu eksik."
+        ETAP23_REPORT_FILE="$1"
+        ;;
       --skip-apt-update)
         SKIP_APT_UPDATE=1
         ;;
@@ -529,11 +750,29 @@ parse_args() {
       --wine-check)
         ACTION_MODE=wine-check
         ;;
+      --wine-diag)
+        ACTION_MODE=wine-diag
+        ;;
       --wine-version)
         ACTION_MODE=wine-version
         ;;
       --winecfg)
         ACTION_MODE=winecfg
+        ;;
+      --wine-run-exe)
+        ACTION_MODE=wine-run-exe
+        shift
+        [[ $# -gt 0 ]] || fail "--wine-run-exe icin dosya yolu eksik."
+        WINE_RUN_PATH="$1"
+        ;;
+      --wine-run-msi)
+        ACTION_MODE=wine-run-msi
+        shift
+        [[ $# -gt 0 ]] || fail "--wine-run-msi icin dosya yolu eksik."
+        WINE_RUN_PATH="$1"
+        ;;
+      --wine-sync-shortcuts)
+        ACTION_MODE=wine-sync-shortcuts
         ;;
       --wine-remove)
         ACTION_MODE=wine-remove
@@ -544,8 +783,38 @@ parse_args() {
       --wine-rebuild-prefix)
         ACTION_MODE=wine-rebuild-prefix
         ;;
+      --service-health-check)
+        ACTION_MODE=service-health-check
+        ;;
+      --service-health-restart)
+        ACTION_MODE=service-health-restart
+        shift
+        [[ $# -gt 0 ]] || fail "--service-health-restart icin birim adi eksik."
+        SERVICE_HEALTH_TARGET="$1"
+        ;;
+      --usb-report)
+        ACTION_MODE=usb-report
+        ;;
+      --usb-repair)
+        ACTION_MODE=usb-repair
+        shift
+        [[ $# -gt 0 ]] || fail "--usb-repair icin aygit yolu eksik."
+        USB_REPAIR_TARGET="$1"
+        ;;
+      --resolution-status)
+        ACTION_MODE=resolution-status
+        ;;
+      --resolution-profile)
+        ACTION_MODE=resolution-profile
+        shift
+        [[ $# -gt 0 ]] || fail "--resolution-profile icin profil adi eksik."
+        RESOLUTION_PROFILE_TARGET="$1"
+        ;;
       --eta-kayit-repair)
         ACTION_MODE=eta-kayit-repair
+        ;;
+      --eta-kayit-preflight)
+        ACTION_MODE=eta-kayit-preflight
         ;;
       --eta-kayit-repair-reinstall-ahenk)
         ACTION_MODE=eta-kayit-repair-reinstall-ahenk
@@ -649,6 +918,26 @@ parse_args() {
         [[ $# -gt 0 ]] || fail "--wine-windows-version icin deger eksik."
         WINE_WINDOWS_VERSION="$1"
         ;;
+      --wine-run-path)
+        shift
+        [[ $# -gt 0 ]] || fail "--wine-run-path icin deger eksik."
+        WINE_RUN_PATH="$1"
+        ;;
+      --service-health-target)
+        shift
+        [[ $# -gt 0 ]] || fail "--service-health-target icin deger eksik."
+        SERVICE_HEALTH_TARGET="$1"
+        ;;
+      --usb-target)
+        shift
+        [[ $# -gt 0 ]] || fail "--usb-target icin deger eksik."
+        USB_REPAIR_TARGET="$1"
+        ;;
+      --resolution-profile-target)
+        shift
+        [[ $# -gt 0 ]] || fail "--resolution-profile-target icin deger eksik."
+        RESOLUTION_PROFILE_TARGET="$1"
+        ;;
       --winetricks-packages)
         shift
         [[ $# -gt 0 ]] || fail "--winetricks-packages icin deger eksik."
@@ -737,8 +1026,8 @@ validate_bool() {
 }
 
 validate_settings() {
-  [[ "${ACTION_MODE}" =~ ^(setup|touchdrv-upgrade|touchdrv-only-upgrade|touchdrv-check|touchdrv-rollback|touch-calibration-start|touch-calibration-status|touch-calibration-reset|wine-install|wine-check|wine-version|winecfg|wine-remove|wine-remove-purge-prefixes|wine-rebuild-prefix|eta-kayit-repair|eta-kayit-repair-reinstall-ahenk|eta-kayit-repair-full-upgrade)$ ]] || \
-    fail "ACTION_MODE setup, touchdrv-upgrade, touchdrv-only-upgrade, touchdrv-check, touchdrv-rollback, touch-calibration-start, touch-calibration-status, touch-calibration-reset, wine-install, wine-check, wine-version, winecfg, wine-remove, wine-remove-purge-prefixes, wine-rebuild-prefix, eta-kayit-repair, eta-kayit-repair-reinstall-ahenk veya eta-kayit-repair-full-upgrade olmalidir."
+  [[ "${ACTION_MODE}" =~ ^(setup|touchdrv-upgrade|touchdrv-only-upgrade|touchdrv-check|touchdrv-rollback|touch-calibration-start|touch-calibration-status|touch-calibration-reset|wine-install|wine-check|wine-diag|wine-version|winecfg|wine-run-exe|wine-run-msi|wine-sync-shortcuts|wine-remove|wine-remove-purge-prefixes|wine-rebuild-prefix|service-health-check|service-health-restart|usb-report|usb-repair|resolution-status|resolution-profile|eta-kayit-preflight|eta-kayit-repair|eta-kayit-repair-reinstall-ahenk|eta-kayit-repair-full-upgrade)$ ]] || \
+    fail "ACTION_MODE setup, touchdrv-upgrade, touchdrv-only-upgrade, touchdrv-check, touchdrv-rollback, touch-calibration-start, touch-calibration-status, touch-calibration-reset, wine-install, wine-check, wine-diag, wine-version, winecfg, wine-run-exe, wine-run-msi, wine-sync-shortcuts, wine-remove, wine-remove-purge-prefixes, wine-rebuild-prefix, service-health-check, service-health-restart, usb-report, usb-repair, resolution-status, resolution-profile, eta-kayit-preflight, eta-kayit-repair, eta-kayit-repair-reinstall-ahenk veya eta-kayit-repair-full-upgrade olmalidir."
   validate_bool "${ENABLE_HOSTNAME_CHANGE}" || fail "ENABLE_HOSTNAME_CHANGE yalnizca 0 veya 1 olabilir."
   validate_bool "${ENABLE_REMOVE_OGRENCI}" || fail "ENABLE_REMOVE_OGRENCI yalnizca 0 veya 1 olabilir."
   validate_bool "${ENABLE_REMOVE_OGRETMEN}" || fail "ENABLE_REMOVE_OGRETMEN yalnizca 0 veya 1 olabilir."
@@ -756,6 +1045,22 @@ validate_settings() {
   validate_bool "${PAUSE_ON_ERROR}" || fail "PAUSE_ON_ERROR yalnizca 0 veya 1 olabilir."
   [[ "${INTERACTIVE_MODE}" =~ ^(auto|0|1|true|false|yes|no)$ ]] || fail "INTERACTIVE_MODE degeri gecersiz."
   [[ -z "${WINE_TARGET_USER}" || "${WINE_TARGET_USER}" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]] || fail "WINE_TARGET_USER gecersiz."
+
+  if [[ "${ACTION_MODE}" == "wine-run-exe" || "${ACTION_MODE}" == "wine-run-msi" ]]; then
+    [[ -n "${WINE_RUN_PATH}" ]] || fail "Wine ile calistirilacak dosya yolu bos olamaz."
+  fi
+
+  if [[ "${ACTION_MODE}" == "service-health-restart" ]]; then
+    [[ -n "${SERVICE_HEALTH_TARGET}" ]] || fail "Servis yeniden baslatma icin hedef birim bos olamaz."
+  fi
+
+  if [[ "${ACTION_MODE}" == "usb-repair" ]]; then
+    [[ -n "${USB_REPAIR_TARGET}" ]] || fail "USB onarim icin hedef aygit bos olamaz."
+  fi
+
+  if [[ "${ACTION_MODE}" == "resolution-profile" ]]; then
+    [[ "${RESOLUTION_PROFILE_TARGET}" =~ ^(4k|fhd|native)$ ]] || fail "Cozunurluk profili 4k, fhd veya native olmalidir."
+  fi
 
   if is_enabled "${ENABLE_OPEN_ETA_KAYIT}"; then
     [[ "${ETA_KAYIT_KURUM_KODU}" =~ ^[0-9]+$ ]] || fail "ETA Kayit kurum kodu yalnizca rakamlardan olusmalidir."
@@ -860,7 +1165,7 @@ configure_interactive_choices() {
     ENABLE_REMOVE_OGRETMEN=0
   fi
 
-  if ask_yes_no "e-ag-client paketi kurulsun mu?" "${ENABLE_EAG_CLIENT}"; then
+  if ask_yes_no "e-ag-client (Ag Kontrol istemci) paketi kurulsun mu?" "${ENABLE_EAG_CLIENT}"; then
     ENABLE_EAG_CLIENT=1
   else
     ENABLE_EAG_CLIENT=0
@@ -1576,6 +1881,24 @@ find_active_graphical_session() {
   return 1
 }
 
+run_command_as_active_graphical_user() {
+  local env_args=()
+  local home_dir=""
+
+  [[ -n "${ACTIVE_GUI_USER}" ]] || fail "Aktif grafik kullanicisi belirlenemedi."
+  home_dir="$(require_existing_user_home "${ACTIVE_GUI_USER}")"
+  [[ -n "${ACTIVE_GUI_DISPLAY}" ]] && env_args+=("DISPLAY=${ACTIVE_GUI_DISPLAY}")
+  [[ -n "${ACTIVE_GUI_XAUTHORITY}" ]] && env_args+=("XAUTHORITY=${ACTIVE_GUI_XAUTHORITY}")
+  [[ -n "${ACTIVE_GUI_DBUS_SESSION_BUS_ADDRESS}" ]] && env_args+=("DBUS_SESSION_BUS_ADDRESS=${ACTIVE_GUI_DBUS_SESSION_BUS_ADDRESS}")
+  [[ -n "${ACTIVE_GUI_XDG_RUNTIME_DIR}" ]] && env_args+=("XDG_RUNTIME_DIR=${ACTIVE_GUI_XDG_RUNTIME_DIR}")
+  [[ -n "${ACTIVE_GUI_WAYLAND_DISPLAY}" ]] && env_args+=("WAYLAND_DISPLAY=${ACTIVE_GUI_WAYLAND_DISPLAY}")
+
+  runuser -u "${ACTIVE_GUI_USER}" -- env \
+    HOME="${home_dir}" \
+    "${env_args[@]}" \
+    "$@"
+}
+
 find_eta_kayit_desktop_file() {
   local desktop_file
 
@@ -1805,6 +2128,219 @@ repair_eta_kayit_runtime_if_needed() {
 
   log "UYARI: ETA Kayit dosyalari otomatik onarilamadi: ${target_file}"
   return 0
+}
+
+eta_kayit_installed_version() {
+  dpkg-query -W -f='${Version}' "${ETA_KAYIT_PACKAGE}" 2>/dev/null || true
+}
+
+eta_kayit_candidate_version() {
+  apt-cache policy "${ETA_KAYIT_PACKAGE}" 2>/dev/null | awk '/Candidate:/ {print $2; exit}'
+}
+
+ahenk_installed_version() {
+  dpkg-query -W -f='${Version}' "${AHENK_PACKAGE}" 2>/dev/null || true
+}
+
+list_connected_usb_storage_devices() {
+  local line name transport model
+
+  command -v lsblk >/dev/null 2>&1 || return 1
+
+  while IFS= read -r line; do
+    name="$(printf '%s\n' "${line}" | sed -n 's/.*NAME="\([^"]*\)".*/\1/p')"
+    transport="$(printf '%s\n' "${line}" | sed -n 's/.*TRAN="\([^"]*\)".*/\1/p')"
+    model="$(printf '%s\n' "${line}" | sed -n 's/.*MODEL="\([^"]*\)".*/\1/p')"
+    [[ "${transport}" == "usb" && -n "${name}" ]] || continue
+    printf '/dev/%s|%s\n' "${name}" "${model}"
+  done < <(lsblk -S -n -P -o NAME,TRAN,MODEL 2>/dev/null)
+}
+
+verify_eta_kayit_package_state_preflight() {
+  local installed_version="" candidate_version="" desktop_file="" command_path=""
+
+  log "ETA Kayit paket ve baslatici kontrolu yapiliyor."
+
+  if package_installed "${ETA_KAYIT_PACKAGE}"; then
+    installed_version="$(eta_kayit_installed_version)"
+    postcheck_ok "${ETA_KAYIT_PACKAGE} paketi kurulu: ${installed_version:-surum okunamadi}"
+  else
+    postcheck_warn "${ETA_KAYIT_PACKAGE} paketi kurulu gorunmuyor."
+  fi
+
+  candidate_version="$(eta_kayit_candidate_version)"
+  if [[ -n "${candidate_version}" && "${candidate_version}" != "(none)" ]]; then
+    postcheck_info "${ETA_KAYIT_PACKAGE} depo adayi: ${candidate_version}"
+    if [[ -n "${installed_version}" ]] && dpkg --compare-versions "${candidate_version}" gt "${installed_version}"; then
+      postcheck_warn "${ETA_KAYIT_PACKAGE} icin daha yeni bir surum gorunuyor: ${installed_version} -> ${candidate_version}"
+    fi
+  else
+    postcheck_info "${ETA_KAYIT_PACKAGE} icin uygun depo adayi okunamadi."
+  fi
+
+  command_path="$(find_eta_kayit_command || true)"
+  if [[ -n "${command_path}" ]]; then
+    postcheck_ok "ETA Kayit calistirma komutu bulundu: ${command_path}"
+  else
+    postcheck_warn "ETA Kayit icin dogrudan calistirma komutu bulunamadi."
+  fi
+
+  desktop_file="$(find_eta_kayit_desktop_file || true)"
+  if [[ -n "${desktop_file}" ]]; then
+    postcheck_ok "ETA Kayit masaustu dosyasi bulundu: ${desktop_file}"
+  else
+    postcheck_warn "ETA Kayit masaustu baslaticisi bulunamadi."
+  fi
+}
+
+verify_eta_kayit_runtime_state_preflight() {
+  log "ETA Kayit runtime dosyalari ve otomasyon bagimliliklari kontrol ediliyor."
+
+  if [[ -f "${ETA_KAYIT_MAINWINDOW_PATH}" ]]; then
+    postcheck_info "ETA Kayit ana pencere dosyasi mevcut: ${ETA_KAYIT_MAINWINDOW_PATH}"
+    if eta_kayit_mainwindow_needs_runtime_repair; then
+      postcheck_warn "ETA Kayit runtime dosyalari onarim ihtiyaci gosteriyor: ${ETA_KAYIT_MAINWINDOW_PATH}"
+    else
+      postcheck_ok "ETA Kayit runtime dosyalari tutarli gorunuyor."
+    fi
+  else
+    postcheck_warn "ETA Kayit ana pencere dosyasi bulunamadi: ${ETA_KAYIT_MAINWINDOW_PATH}"
+  fi
+
+  if python3 -c 'import pyatspi' >/dev/null 2>&1; then
+    postcheck_ok "python3-pyatspi erisilebilir; ETA Kayit otomasyonu calisabilir."
+  else
+    postcheck_warn "python3-pyatspi erisilemiyor. ETA Kayit otomasyonu eksik veya bozuk olabilir."
+  fi
+}
+
+verify_eta_kayit_session_state_preflight() {
+  log "ETA Kayit icin aktif oturum kontrolu yapiliyor."
+
+  if user_exists "${ETAPADMIN_USER}"; then
+    postcheck_ok "${ETAPADMIN_USER} kullanicisi sistemde mevcut."
+  else
+    postcheck_warn "${ETAPADMIN_USER} kullanicisi sistemde bulunamadi."
+  fi
+
+  if find_active_graphical_session; then
+    postcheck_info "Aktif grafik oturumu: ${ACTIVE_GUI_USER} (${ACTIVE_GUI_SESSION_TYPE})"
+    if [[ "${ACTIVE_GUI_USER}" == "${ETAPADMIN_USER}" ]]; then
+      postcheck_ok "ETA Kayit icin yonetici oturumu hazir gorunuyor."
+    else
+      postcheck_warn "Aktif grafik oturumu ${ETAPADMIN_USER} degil: ${ACTIVE_GUI_USER}. ETA Kayit icin yonetici oturumu onerilir."
+    fi
+  else
+    postcheck_warn "Aktif grafik oturumu bulunamadi. ETA Kayit uygulamasi otomatik acilamayabilir."
+  fi
+}
+
+verify_eta_kayit_network_state_preflight() {
+  local default_route=""
+
+  log "ETA Kayit icin temel ag erisimi kontrol ediliyor."
+
+  if command -v ip >/dev/null 2>&1; then
+    default_route="$(ip route show default 2>/dev/null | awk 'NR == 1 {print; exit}')"
+    if [[ -n "${default_route}" ]]; then
+      postcheck_info "Varsayilan ag gecidi bulundu: ${default_route}"
+    else
+      postcheck_warn "Varsayilan ag gecidi bulunamadi."
+    fi
+  else
+    postcheck_info "ip komutu bulunamadigi icin varsayilan rota kontrolu atlandi."
+  fi
+
+  if getent ahosts depo.etap.org.tr >/dev/null 2>&1; then
+    postcheck_ok "depo.etap.org.tr DNS cozumlemesi basarili."
+  else
+    postcheck_warn "depo.etap.org.tr DNS cozumlemesi basarisiz."
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    if curl -fsSI --connect-timeout 5 --max-time 10 https://rehber.etap.org.tr >/dev/null 2>&1; then
+      postcheck_ok "HTTPS erisimi dogrulandi: rehber.etap.org.tr"
+    else
+      postcheck_warn "HTTPS erisimi dogrulanamadi: rehber.etap.org.tr"
+    fi
+  else
+    postcheck_info "curl bulunamadigi icin HTTPS erisim kontrolu atlandi."
+  fi
+}
+
+verify_eta_kayit_usb_state_preflight() {
+  local usb_device usb_model
+  local usb_count=0
+
+  log "ETA Kayit oncesi USB depolama aygitlari kontrol ediliyor."
+
+  while IFS='|' read -r usb_device usb_model; do
+    [[ -n "${usb_device}" ]] || continue
+    usb_count=$((usb_count + 1))
+    usb_model="${usb_model:-model okunamadi}"
+    postcheck_warn "Bagli USB depolama aygiti tespit edildi: ${usb_device} (${usb_model})"
+  done < <(list_connected_usb_storage_devices || true)
+
+  if (( usb_count == 0 )); then
+    postcheck_ok "Bagli USB depolama aygiti tespit edilmedi."
+  else
+    postcheck_info "ETA Kayit oncesi gerekmeyen USB bellek ve diskleri cikarmaniz onerilir."
+  fi
+}
+
+verify_eta_kayit_ahenk_state_preflight() {
+  local ahenk_version=""
+  local leftover_dir=""
+  local leftover_count=0
+
+  log "Ahenk kayit kalintilari kontrol ediliyor."
+
+  if package_installed "${AHENK_PACKAGE}"; then
+    ahenk_version="$(ahenk_installed_version)"
+    postcheck_info "${AHENK_PACKAGE} paketi kurulu: ${ahenk_version:-surum okunamadi}"
+  else
+    postcheck_info "${AHENK_PACKAGE} paketi kurulu gorunmuyor."
+  fi
+
+  if [[ -f "${AHENK_DB_PATH}" ]]; then
+    postcheck_warn "Ahenk kayit verisi bulundu: ${AHENK_DB_PATH}. Tahta daha once kaydedildiyse yeniden kayitta onarim gerekebilir."
+  else
+    postcheck_ok "Ahenk kayit verisi dosyasi bulunmadi."
+  fi
+
+  for leftover_dir in "${AHENK_LEFTOVER_DIRS[@]}"; do
+    [[ -e "${leftover_dir}" ]] || continue
+    leftover_count=$((leftover_count + 1))
+  done
+
+  if (( leftover_count == 0 )); then
+    postcheck_ok "Beklenmeyen Ahenk kalinti klasoru tespit edilmedi."
+  elif package_installed "${AHENK_PACKAGE}"; then
+    postcheck_info "Ahenk klasorleri mevcut; paket kurulu oldugu icin bu beklenebilir."
+  else
+    postcheck_warn "Ahenk paketi kurulu degil ama ${leftover_count} kalinti klasor tespit edildi."
+  fi
+}
+
+run_eta_kayit_preflight_checks() {
+  CHECK_WARNINGS=0
+  log "ETA Kayit on kontrolu basliyor."
+
+  verify_eta_kayit_package_state_preflight
+  verify_eta_kayit_runtime_state_preflight
+  verify_eta_kayit_session_state_preflight
+  verify_eta_kayit_network_state_preflight
+  verify_eta_kayit_usb_state_preflight
+  verify_eta_kayit_ahenk_state_preflight
+
+  if (( CHECK_WARNINGS > 0 )); then
+    postcheck_info "Oneri: ETA Kayit oncesi rapordaki uyarilari giderin; gerekiyorsa ahenk onarim aracini calistirin."
+    log "ETA Kayit on kontrolu ${CHECK_WARNINGS} uyari ile tamamlandi."
+  else
+    postcheck_ok "ETA Kayit on kontrolunde belirgin engel gorunmedi."
+    postcheck_info "Oneri: ETA Kayit uygulamasi acilip kayit denenebilir."
+    log "ETA Kayit on kontrolu basarili tamamlandi."
+  fi
 }
 
 write_eta_kayit_register_helper() {
@@ -3024,11 +3560,14 @@ ensure_eta_kayit_package_ready_for_launch() {
 }
 
 prepare_eag_package() {
-  local temp_dir fixed_deb postinst
+  local temp_dir fixed_deb postinst package_name
 
-  [[ -f "${EAG_DEB}" ]] || fail "e-ag paketi bulunamadi: ${EAG_DEB}"
+  [[ -f "${EAG_DEB}" ]] || fail "e-ag-client paketi bulunamadi: ${EAG_DEB}"
   require_command dpkg-deb
   require_command sed
+
+  package_name="$(dpkg-deb -f "${EAG_DEB}" Package 2>/dev/null || true)"
+  [[ "${package_name}" == "e-ag-client" ]] || fail "Secilen paket e-ag-client degil (${package_name:-bilinmiyor}): ${EAG_DEB}"
 
   temp_dir="$(mktemp -d)"
   fixed_deb="${temp_dir}/e-ag-client-fixed.deb"
@@ -3041,7 +3580,7 @@ prepare_eag_package() {
     sed -i '1 s|/bin/sh|/bin/bash|' "${postinst}"
   fi
 
-  if [[ -f "${postinst}" ]] && grep -q '^e-ag-client-tray&$' "${postinst}"; then
+  if [[ -f "${postinst}" ]] && grep -Eq '^(e-ag-client-tray|e-ag-tray)&$' "${postinst}"; then
     log "e-ag-client postinst icindeki tray baslatma adimi GUI yoksa atlanacak sekilde duzenleniyor."
     python3 - "${postinst}" <<'PY'
 from pathlib import Path
@@ -3053,6 +3592,12 @@ content = content.replace(
     "e-ag-client-tray&",
     "if command -v e-ag-client-tray >/dev/null 2>&1 && [[ -n \"${DISPLAY:-}\" ]]; then\n"
     "e-ag-client-tray >/dev/null 2>&1 &\n"
+    "fi",
+)
+content = content.replace(
+    "e-ag-tray&",
+    "if command -v e-ag-tray >/dev/null 2>&1 && [[ -n \"${DISPLAY:-}\" ]]; then\n"
+    "e-ag-tray >/dev/null 2>&1 &\n"
     "fi",
 )
 postinst.write_text(content)
@@ -3270,6 +3815,11 @@ write_touchdrv_user_summary() {
     [[ -n "${line}" ]] || continue
     append_user_summary_line "- ${line}"
   done <<<"${recommendation}"
+
+  if [[ -n "${ETAP23_REPORT_FILE}" ]]; then
+    append_user_summary_line ""
+    append_user_summary_line "Rapor dosyasi: ${ETAP23_REPORT_FILE}"
+  fi
 }
 
 report_eta_touchdrv_state() {
@@ -4259,7 +4809,532 @@ repair_eta_kayit_registration() {
 
 run_eta_kayit_repair_mode() {
   require_commands_for_eta_kayit_mode
-  repair_eta_kayit_registration
+
+  case "${ACTION_MODE}" in
+    eta-kayit-preflight)
+      run_eta_kayit_preflight_checks
+      ;;
+    *)
+      repair_eta_kayit_registration
+      ;;
+  esac
+}
+
+service_health_supported_units() {
+  printf '%s\n' \
+    eta-touchdrv.service \
+    NetworkManager.service \
+    cups.service \
+    etap-idle-shutdown.timer \
+    etap-scheduled-poweroff.timer
+}
+
+canonical_service_health_target() {
+  case "$1" in
+    eta-touchdrv|eta-touchdrv.service)
+      printf 'eta-touchdrv.service\n'
+      ;;
+    NetworkManager|NetworkManager.service)
+      printf 'NetworkManager.service\n'
+      ;;
+    cups|cups.service)
+      printf 'cups.service\n'
+      ;;
+    etap-idle-shutdown|etap-idle-shutdown.timer)
+      printf 'etap-idle-shutdown.timer\n'
+      ;;
+    etap-scheduled-poweroff|etap-scheduled-poweroff.timer)
+      printf 'etap-scheduled-poweroff.timer\n'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+service_health_unit_is_optional() {
+  case "$1" in
+    cups.service|etap-idle-shutdown.timer|etap-scheduled-poweroff.timer)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+service_health_unit_label() {
+  case "$1" in
+    eta-touchdrv.service)
+      printf 'ETA dokunmatik surucusu'
+      ;;
+    NetworkManager.service)
+      printf 'Ag yoneticisi'
+      ;;
+    cups.service)
+      printf 'Yazici servisi'
+      ;;
+    etap-idle-shutdown.timer)
+      printf 'Bosta kapanma timeri'
+      ;;
+    etap-scheduled-poweroff.timer)
+      printf 'Planli kapanma timeri'
+      ;;
+    *)
+      printf '%s' "$1"
+      ;;
+  esac
+}
+
+report_single_service_health_unit() {
+  local unit="$1"
+  local label load_state active_state sub_state unit_file_state fragment_path description
+
+  label="$(service_health_unit_label "${unit}")"
+  load_state="$(systemctl show "${unit}" -p LoadState --value 2>/dev/null || true)"
+  active_state="$(systemctl show "${unit}" -p ActiveState --value 2>/dev/null || true)"
+  sub_state="$(systemctl show "${unit}" -p SubState --value 2>/dev/null || true)"
+  unit_file_state="$(systemctl show "${unit}" -p UnitFileState --value 2>/dev/null || true)"
+  fragment_path="$(systemctl show "${unit}" -p FragmentPath --value 2>/dev/null || true)"
+  description="$(systemctl show "${unit}" -p Description --value 2>/dev/null || true)"
+
+  if [[ -n "${description}" ]]; then
+    postcheck_info "${label}: ${description}"
+  fi
+
+  if [[ -z "${load_state}" || "${load_state}" == "not-found" ]]; then
+    if service_health_unit_is_optional "${unit}"; then
+      postcheck_info "${label} bulunamadi veya bu sistemde kurulmamis."
+    else
+      postcheck_warn "${label} bulunamadi."
+    fi
+    return 0
+  fi
+
+  postcheck_info "${label} durumu: active=${active_state:-bilinmiyor}, sub=${sub_state:-bilinmiyor}, enabled=${unit_file_state:-bilinmiyor}"
+  [[ -n "${fragment_path}" ]] && postcheck_info "${label} birim dosyasi: ${fragment_path}"
+
+  if [[ "${active_state}" == "active" ]]; then
+    postcheck_ok "${label} calisiyor."
+  elif service_health_unit_is_optional "${unit}"; then
+    postcheck_info "${label} aktif degil."
+  else
+    postcheck_warn "${label} aktif degil."
+  fi
+}
+
+run_service_health_check() {
+  local unit=""
+
+  CHECK_WARNINGS=0
+  log "Servis saglik raporu basliyor."
+
+  while IFS= read -r unit; do
+    [[ -n "${unit}" ]] || continue
+    report_single_service_health_unit "${unit}"
+  done < <(service_health_supported_units)
+
+  if (( CHECK_WARNINGS > 0 )); then
+    log "Servis saglik raporu ${CHECK_WARNINGS} uyari ile tamamlandi."
+  else
+    log "Servis saglik raporunda kritik sorun gorunmedi."
+  fi
+}
+
+restart_service_health_target() {
+  local unit=""
+
+  unit="$(canonical_service_health_target "${SERVICE_HEALTH_TARGET}")" || \
+    fail "Desteklenmeyen servis veya timer: ${SERVICE_HEALTH_TARGET}"
+
+  log "Birim yeniden baslatiliyor: ${unit}"
+  systemctl restart "${unit}"
+  report_single_service_health_unit "${unit}"
+}
+
+run_service_health_mode() {
+  require_commands_for_service_health_mode
+
+  case "${ACTION_MODE}" in
+    service-health-check)
+      run_service_health_check
+      ;;
+    service-health-restart)
+      run_step "servis veya timer yeniden baslatma" restart_service_health_target
+      ;;
+  esac
+}
+
+extract_lsblk_kv_field() {
+  local line="$1"
+  local key="$2"
+
+  printf '%s\n' "${line}" | sed -n "s/.*${key}=\"\\([^\"]*\\)\".*/\\1/p"
+}
+
+normalize_usb_target_device() {
+  local device="$1"
+
+  [[ "${device}" == /dev/* ]] || device="/dev/${device}"
+  printf '%s\n' "${device}"
+}
+
+usb_storage_device_is_connected() {
+  local target="$1"
+  local device_entry="" device_node=""
+
+  while IFS= read -r device_entry; do
+    device_node="${device_entry%%|*}"
+    [[ -n "${device_node}" ]] || continue
+    [[ "${device_node}" == "${target}" ]] && return 0
+  done < <(list_connected_usb_storage_devices || true)
+
+  return 1
+}
+
+list_usb_repair_targets() {
+  local device="$1"
+  local line="" node="" node_type="" fs_type="" size="" mount_point=""
+  local found_partitions=0
+  local disk_line=""
+
+  while IFS= read -r line; do
+    node="$(extract_lsblk_kv_field "${line}" NAME)"
+    node_type="$(extract_lsblk_kv_field "${line}" TYPE)"
+    fs_type="$(extract_lsblk_kv_field "${line}" FSTYPE)"
+    size="$(extract_lsblk_kv_field "${line}" SIZE)"
+    mount_point="$(extract_lsblk_kv_field "${line}" MOUNTPOINT)"
+    [[ -n "${node}" ]] || continue
+
+    if [[ "${node_type}" == "disk" ]]; then
+      disk_line="${node}|${fs_type}|${size}|${mount_point}|disk"
+      continue
+    fi
+
+    if [[ "${node_type}" == "part" ]]; then
+      found_partitions=1
+      printf '%s|%s|%s|%s|part\n' "${node}" "${fs_type}" "${size}" "${mount_point}"
+    fi
+  done < <(lsblk -ln -P -o NAME,TYPE,FSTYPE,SIZE,MOUNTPOINT "${device}" 2>/dev/null)
+
+  if (( found_partitions == 0 )) && [[ -n "${disk_line}" ]]; then
+    printf '%s\n' "${disk_line}"
+  fi
+}
+
+report_usb_storage_state() {
+  local device_entry="" device_node="" device_model=""
+  local target_line="" node="" fs_type="" size="" mount_point="" target_kind=""
+  local device_count=0
+
+  CHECK_WARNINGS=0
+  log "USB depolama raporu basliyor."
+
+  while IFS= read -r device_entry; do
+    device_node="${device_entry%%|*}"
+    device_model="${device_entry#*|}"
+    [[ -n "${device_node}" ]] || continue
+    device_count=$((device_count + 1))
+
+    postcheck_info "USB aygiti: ${device_node} (${device_model:-model okunamadi})"
+
+    while IFS= read -r target_line; do
+      [[ -n "${target_line}" ]] || continue
+      IFS='|' read -r node fs_type size mount_point target_kind <<<"${target_line}"
+      postcheck_info "  Hedef: ${node} tip=${target_kind} fs=${fs_type:-bilinmiyor} boyut=${size:-bilinmiyor} bagli=${mount_point:-hayir}"
+      if [[ -n "${mount_point}" ]]; then
+        postcheck_info "  Not: Onarimdan once ${node} ayri baglanacak."
+      fi
+    done < <(list_usb_repair_targets "${device_node}")
+  done < <(list_connected_usb_storage_devices || true)
+
+  if (( device_count == 0 )); then
+    postcheck_info "Bagli USB depolama aygiti bulunamadi."
+  fi
+
+  if (( CHECK_WARNINGS > 0 )); then
+    log "USB depolama raporu ${CHECK_WARNINGS} uyari ile tamamlandi."
+  else
+    log "USB depolama raporu tamamlandi."
+  fi
+}
+
+repair_usb_storage_device() {
+  local target_device="" target_line="" node="" fs_type="" size="" mount_point="" target_kind=""
+  local repaired_any=0
+  local status=0
+  local failed_any=0
+
+  target_device="$(normalize_usb_target_device "${USB_REPAIR_TARGET}")"
+  usb_storage_device_is_connected "${target_device}" || \
+    fail "Bagli USB depolama aygiti bulunamadi: ${target_device}"
+
+  log "USB aygiti onarimi basliyor: ${target_device}"
+  sync
+
+  while IFS= read -r target_line; do
+    [[ -n "${target_line}" ]] || continue
+    IFS='|' read -r node fs_type size mount_point target_kind <<<"${target_line}"
+    [[ -n "${node}" ]] || continue
+
+    if [[ -n "${mount_point}" ]]; then
+      if [[ "${mount_point}" == "/" ]]; then
+        fail "Kok dosya sistemi onarim disi birakildi: ${node}"
+      fi
+
+      log "${node} ayri baglaniyor: ${mount_point}"
+      umount "${node}"
+    fi
+
+    log "${node} icin fsck calistiriliyor. fs=${fs_type:-bilinmiyor} boyut=${size:-bilinmiyor}"
+    set +e
+    fsck -a "${node}"
+    status=$?
+    set -e
+
+    case "${status}" in
+      0)
+        log "${node} icin dosya sistemi hatasi bulunmadi."
+        repaired_any=1
+        ;;
+      1)
+        log "${node} icin bulunan hatalar duzeltildi."
+        repaired_any=1
+        ;;
+      2)
+        log "${node} icin onarim tamamlandi; sistemin yeniden baslatilmasi oneriliyor."
+        repaired_any=1
+        ;;
+      *)
+        log "UYARI: ${node} icin fsck basarisiz oldu. Cikis kodu: ${status}"
+        failed_any=1
+        ;;
+    esac
+  done < <(list_usb_repair_targets "${target_device}")
+
+  if (( repaired_any == 0 && failed_any == 0 )); then
+    fail "Onarilacak bolum bulunamadi: ${target_device}"
+  fi
+
+  if (( failed_any == 1 )); then
+    fail "USB onarimi tamamlanamadi: ${target_device}"
+  fi
+
+  log "USB onarimi tamamlandi: ${target_device}"
+}
+
+run_usb_repair_mode() {
+  require_commands_for_usb_mode
+
+  case "${ACTION_MODE}" in
+    usb-report)
+      run_usb_storage_report
+      ;;
+    usb-repair)
+      run_step "USB depolama aygitini onarma" repair_usb_storage_device
+      ;;
+  esac
+}
+
+run_usb_storage_report() {
+  report_usb_storage_state
+}
+
+capture_xrandr_query_output() {
+  find_active_graphical_session || fail "Aktif grafik oturumu bulunamadi."
+  [[ "${ACTIVE_GUI_SESSION_TYPE}" == "x11" ]] || fail "Cozunurluk profilleri su an yalnizca X11 oturumunu destekler. Bulunan: ${ACTIVE_GUI_SESSION_TYPE}"
+  run_command_as_active_graphical_user xrandr --query
+}
+
+emit_resolution_output_summary() {
+  local query_output="$1"
+  local line="" current_output="" current_mode="" primary=0 has_4k=0 has_fhd=0 mode=""
+
+  while IFS= read -r line; do
+    if [[ "${line}" == *" connected"* ]]; then
+      if [[ -n "${current_output}" ]]; then
+        printf '%s|%s|%s|%s|%s\n' "${current_output}" "${primary}" "${current_mode}" "${has_4k}" "${has_fhd}"
+      fi
+
+      current_output="${line%% *}"
+      current_mode="$(printf '%s\n' "${line}" | sed -n 's/.* connected \(primary \)\?\([0-9]\+x[0-9]\+\)+.*/\2/p')"
+      if [[ "${line}" == *" primary "* ]]; then
+        primary=1
+      else
+        primary=0
+      fi
+      has_4k=0
+      has_fhd=0
+      continue
+    fi
+
+    if [[ -n "${current_output}" && "${line}" =~ ^[[:space:]]+[0-9]+x[0-9]+ ]]; then
+      mode="$(printf '%s\n' "${line}" | sed -n 's/^[[:space:]]*\([0-9]\+x[0-9]\+\).*/\1/p')"
+      [[ "${mode}" == "3840x2160" ]] && has_4k=1
+      [[ "${mode}" == "1920x1080" ]] && has_fhd=1
+      continue
+    fi
+
+    if [[ -n "${current_output}" && ! "${line}" =~ ^[[:space:]] ]]; then
+      printf '%s|%s|%s|%s|%s\n' "${current_output}" "${primary}" "${current_mode}" "${has_4k}" "${has_fhd}"
+      current_output=""
+    fi
+  done <<<"${query_output}"
+
+  if [[ -n "${current_output}" ]]; then
+    printf '%s|%s|%s|%s|%s\n' "${current_output}" "${primary}" "${current_mode}" "${has_4k}" "${has_fhd}"
+  fi
+}
+
+select_resolution_target_output() {
+  local query_output="$1"
+  local summary_line="" output_name="" is_primary=""
+  local fallback_output=""
+
+  while IFS= read -r summary_line; do
+    [[ -n "${summary_line}" ]] || continue
+    IFS='|' read -r output_name is_primary _ <<<"${summary_line}"
+    [[ -n "${output_name}" ]] || continue
+    [[ -n "${fallback_output}" ]] || fallback_output="${output_name}"
+    if [[ "${is_primary}" == "1" ]]; then
+      printf '%s\n' "${output_name}"
+      return 0
+    fi
+  done < <(emit_resolution_output_summary "${query_output}")
+
+  [[ -n "${fallback_output}" ]] || return 1
+  printf '%s\n' "${fallback_output}"
+}
+
+resolution_output_supports_mode() {
+  local query_output="$1"
+  local target_output="$2"
+  local target_mode="$3"
+  local summary_line="" output_name="" has_4k="" has_fhd=""
+
+  while IFS= read -r summary_line; do
+    [[ -n "${summary_line}" ]] || continue
+    IFS='|' read -r output_name _ _ has_4k has_fhd <<<"${summary_line}"
+    [[ "${output_name}" == "${target_output}" ]] || continue
+    case "${target_mode}" in
+      3840x2160)
+        [[ "${has_4k}" == "1" ]]
+        return
+        ;;
+      1920x1080)
+        [[ "${has_fhd}" == "1" ]]
+        return
+        ;;
+    esac
+  done < <(emit_resolution_output_summary "${query_output}")
+
+  return 1
+}
+
+report_resolution_status() {
+  local query_output="" summary_line="" output_name="" is_primary="" current_mode="" has_4k="" has_fhd=""
+  local output_count=0
+  local primary_suffix=""
+
+  CHECK_WARNINGS=0
+  log "Cozunurluk profili durumu kontrol ediliyor."
+
+  if ! find_active_graphical_session; then
+    postcheck_warn "Aktif grafik oturumu bulunamadi."
+    return 0
+  fi
+
+  postcheck_info "Aktif grafik oturumu: ${ACTIVE_GUI_USER} (${ACTIVE_GUI_SESSION_TYPE})"
+  if [[ "${ACTIVE_GUI_SESSION_TYPE}" != "x11" ]]; then
+    postcheck_warn "Cozunurluk profilleri su an yalnizca X11 oturumunu destekler."
+    return 0
+  fi
+
+  query_output="$(capture_xrandr_query_output)"
+
+  while IFS= read -r summary_line; do
+    [[ -n "${summary_line}" ]] || continue
+    output_count=$((output_count + 1))
+    IFS='|' read -r output_name is_primary current_mode has_4k has_fhd <<<"${summary_line}"
+    primary_suffix=""
+    [[ "${is_primary}" == "1" ]] && primary_suffix=" (primary)"
+    postcheck_info "Ekran cikisi: ${output_name}${primary_suffix}"
+    if [[ -n "${current_mode}" ]]; then
+      postcheck_ok "${output_name} mevcut cozumunurluk: ${current_mode}"
+    else
+      postcheck_info "${output_name} mevcut cozumunurluk bilgisi okunamadi."
+    fi
+
+    if [[ "${has_4k}" == "1" ]]; then
+      postcheck_ok "${output_name} icin 4K profili mevcut."
+    else
+      postcheck_info "${output_name} icin 4K profili gorunmedi."
+    fi
+
+    if [[ "${has_fhd}" == "1" ]]; then
+      postcheck_ok "${output_name} icin FHD profili mevcut."
+    else
+      postcheck_info "${output_name} icin FHD profili gorunmedi."
+    fi
+  done < <(emit_resolution_output_summary "${query_output}")
+
+  if (( output_count == 0 )); then
+    postcheck_warn "Bagli ekran cikisi tespit edilemedi."
+  fi
+
+  if (( CHECK_WARNINGS > 0 )); then
+    log "Cozunurluk durumu ${CHECK_WARNINGS} uyari ile tamamlandi."
+  else
+    log "Cozunurluk durumu raporu tamamlandi."
+  fi
+}
+
+apply_resolution_profile() {
+  local query_output="" target_output="" target_mode="" label=""
+
+  query_output="$(capture_xrandr_query_output)"
+  target_output="$(select_resolution_target_output "${query_output}")" || fail "Bagli ekran cikisi bulunamadi."
+
+  case "${RESOLUTION_PROFILE_TARGET}" in
+    4k)
+      target_mode="3840x2160"
+      label="4K"
+      ;;
+    fhd)
+      target_mode="1920x1080"
+      label="FHD"
+      ;;
+    native)
+      target_mode=""
+      label="Yerel"
+      ;;
+    *)
+      fail "Desteklenmeyen cozumunurluk profili: ${RESOLUTION_PROFILE_TARGET}"
+      ;;
+  esac
+
+  if [[ -n "${target_mode}" ]]; then
+    resolution_output_supports_mode "${query_output}" "${target_output}" "${target_mode}" || \
+      fail "${target_output} cikisi ${label} modunu desteklemiyor."
+    log "${target_output} icin ${label} profili uygulaniyor."
+    run_command_as_active_graphical_user xrandr --output "${target_output}" --mode "${target_mode}"
+  else
+    log "${target_output} icin yerel cozumunurluk profili uygulaniyor."
+    run_command_as_active_graphical_user xrandr --output "${target_output}" --auto
+  fi
+}
+
+run_resolution_mode() {
+  require_commands_for_resolution_mode
+
+  case "${ACTION_MODE}" in
+    resolution-status)
+      report_resolution_status
+      ;;
+    resolution-profile)
+      run_step "cozunurluk profili uygulama" apply_resolution_profile
+      ;;
+  esac
 }
 
 configure_screensaver_policy() {
@@ -4933,6 +6008,215 @@ run_wine_verification_check() {
   ENABLE_WINE="${previous_enable_wine}"
 }
 
+resolve_wine_target_user_if_possible() {
+  local user_name=""
+
+  if [[ -n "${WINE_TARGET_USER}" ]]; then
+    user_exists "${WINE_TARGET_USER}" || return 1
+    printf '%s\n' "${WINE_TARGET_USER}"
+    return 0
+  fi
+
+  if find_active_graphical_session && [[ -n "${ACTIVE_GUI_USER}" ]]; then
+    printf '%s\n' "${ACTIVE_GUI_USER}"
+    return 0
+  fi
+
+  user_name="$(resolve_gui_user_from_environment || true)"
+  if [[ -n "${user_name}" ]] && user_exists "${user_name}"; then
+    printf '%s\n' "${user_name}"
+    return 0
+  fi
+
+  if user_exists "${ETAPADMIN_USER}"; then
+    printf '%s\n' "${ETAPADMIN_USER}"
+    return 0
+  fi
+
+  return 1
+}
+
+resolve_wine_run_path() {
+  local path_value="$1"
+
+  [[ -n "${path_value}" ]] || fail "Wine icin dosya yolu bos olamaz."
+
+  if [[ "${path_value}" != /* ]]; then
+    path_value="$(pwd -P)/${path_value}"
+  fi
+
+  [[ -e "${path_value}" ]] || fail "Wine dosyasi bulunamadi: ${path_value}"
+  [[ -f "${path_value}" ]] || fail "Wine dosyasi normal bir dosya degil: ${path_value}"
+  printf '%s\n' "${path_value}"
+}
+
+assert_file_readable_by_user() {
+  local username="$1"
+  local file_path="$2"
+
+  runuser -u "${username}" -- test -r "${file_path}" || \
+    fail "${username} kullanicisi dosyayi okuyamiyor: ${file_path}"
+}
+
+launch_wine_file_for_target_user() {
+  local target_user home_dir run_path env_args=()
+
+  prepare_wine_helpers_if_possible
+  find_active_graphical_session || fail "Aktif grafik oturumu bulunamadi. EXE/MSI yalnizca acik masaustu oturumunda calistirilabilir."
+
+  target_user="${WINE_TARGET_USER:-${ACTIVE_GUI_USER}}"
+  [[ -n "${target_user}" ]] || fail "Wine dosyasi icin hedef kullanici belirlenemedi."
+  [[ "${target_user}" == "${ACTIVE_GUI_USER}" ]] || \
+    fail "Wine dosyasi yalnizca aktif grafik oturumundaki kullanici icin calistirilabilir. Bulunan: ${ACTIVE_GUI_USER}, istenen: ${target_user}"
+
+  home_dir="$(require_existing_user_home "${target_user}")"
+  run_path="$(resolve_wine_run_path "${WINE_RUN_PATH}")"
+  assert_file_readable_by_user "${target_user}" "${run_path}"
+
+  [[ -n "${ACTIVE_GUI_DISPLAY}" ]] && env_args+=("DISPLAY=${ACTIVE_GUI_DISPLAY}")
+  [[ -n "${ACTIVE_GUI_XAUTHORITY}" ]] && env_args+=("XAUTHORITY=${ACTIVE_GUI_XAUTHORITY}")
+  [[ -n "${ACTIVE_GUI_DBUS_SESSION_BUS_ADDRESS}" ]] && env_args+=("DBUS_SESSION_BUS_ADDRESS=${ACTIVE_GUI_DBUS_SESSION_BUS_ADDRESS}")
+  [[ -n "${ACTIVE_GUI_XDG_RUNTIME_DIR}" ]] && env_args+=("XDG_RUNTIME_DIR=${ACTIVE_GUI_XDG_RUNTIME_DIR}")
+  [[ -n "${ACTIVE_GUI_WAYLAND_DISPLAY}" ]] && env_args+=("WAYLAND_DISPLAY=${ACTIVE_GUI_WAYLAND_DISPLAY}")
+
+  log "Wine dosyasi baslatiliyor. Kullanici: ${target_user} Dosya: ${run_path}"
+
+  if [[ "${ACTION_MODE}" == "wine-run-msi" ]]; then
+    runuser -u "${target_user}" -- env \
+      HOME="${home_dir}" \
+      "${env_args[@]}" \
+      /usr/local/bin/etap-wine msiexec /i "${run_path}"
+  else
+    runuser -u "${target_user}" -- env \
+      HOME="${home_dir}" \
+      "${env_args[@]}" \
+      /usr/local/bin/etap-wine "${run_path}"
+  fi
+}
+
+sync_wine_shortcuts_for_target_user() {
+  local target_user home_dir
+
+  prepare_wine_helpers_if_possible
+  target_user="$(resolve_wine_target_user)"
+  home_dir="$(require_existing_user_home "${target_user}")"
+
+  log "Wine kisayollari yeniden senkronlaniyor. Kullanici: ${target_user}"
+  runuser -u "${target_user}" -- env \
+    HOME="${home_dir}" \
+    /usr/local/libexec/etap-wine-sync-shortcuts
+  log "Wine kisayol senkronu tamamlandi: ${target_user}"
+}
+
+show_wine_diagnostic_report() {
+  local target_user="" home_dir="" prefix_dir="" marker_file="" bootstrap_log=""
+  local system_wine_bin system_winetricks_bin system_wineboot_bin system_wineserver_bin
+  local package_name helper_path
+
+  log "Wine teshis raporu basliyor."
+  log "Ayarlar: prefix=${WINE_PREFIX_NAME} windows=${WINE_WINDOWS_VERSION} vulkan=${ENABLE_WINE_VULKAN_TRANSLATORS}"
+  log "Winetricks temel listesi: ${WINETRICKS_PACKAGES:-<bos>}"
+  log "Winetricks Vulkan listesi: ${WINETRICKS_VULKAN_PACKAGES:-<bos>}"
+
+  if find_active_graphical_session; then
+    log "Aktif grafik oturumu: ${ACTIVE_GUI_USER} (${ACTIVE_GUI_SESSION_TYPE})"
+    [[ -n "${ACTIVE_GUI_DISPLAY}" ]] && log "DISPLAY=${ACTIVE_GUI_DISPLAY}"
+    [[ -n "${ACTIVE_GUI_WAYLAND_DISPLAY}" ]] && log "WAYLAND_DISPLAY=${ACTIVE_GUI_WAYLAND_DISPLAY}"
+  else
+    log "Aktif grafik oturumu bulunamadi."
+  fi
+
+  system_wine_bin="$(resolve_system_command_if_present wine)"
+  system_winetricks_bin="$(resolve_system_command_if_present winetricks)"
+  system_wineboot_bin="$(resolve_system_command_if_present wineboot)"
+  system_wineserver_bin="$(resolve_system_command_if_present wineserver)"
+
+  if [[ -x "${system_wine_bin}" ]]; then
+    log "wine komutu: ${system_wine_bin}"
+    log "wine surumu: $("${system_wine_bin}" --version 2>/dev/null || printf 'surum okunamadi')"
+  else
+    log "wine komutu bulunamadi."
+  fi
+
+  if [[ -x "${system_winetricks_bin}" ]]; then
+    log "winetricks komutu: ${system_winetricks_bin}"
+    log "winetricks surumu: $("${system_winetricks_bin}" --version 2>/dev/null | head -n 1 || printf 'surum okunamadi')"
+  else
+    log "winetricks komutu bulunamadi."
+  fi
+
+  [[ -x "${system_wineboot_bin}" ]] && log "wineboot komutu hazir: ${system_wineboot_bin}" || log "wineboot komutu bulunamadi."
+  [[ -x "${system_wineserver_bin}" ]] && log "wineserver komutu hazir: ${system_wineserver_bin}" || log "wineserver komutu bulunamadi."
+
+  for package_name in wine wine64 wine32:i386 winetricks cabextract p7zip-full mono-complete xvfb xauth; do
+    if package_installed "${package_name}"; then
+      log "Paket kurulu: ${package_name}"
+    else
+      log "Paket eksik: ${package_name}"
+    fi
+  done
+
+  for helper_path in \
+    /usr/local/libexec/etap-wine-bootstrap \
+    /usr/local/libexec/etap-wine-open-shortcut \
+    /usr/local/libexec/etap-wine-sync-shortcuts \
+    /usr/local/libexec/etap-wine-session-bootstrap \
+    /etc/xdg/autostart/etap-wine-session-bootstrap.desktop \
+    /usr/local/bin/etap-wine \
+    /usr/local/bin/etap-winetricks \
+    /usr/local/bin/wine \
+    /usr/local/bin/winetricks; do
+    if [[ ( "${helper_path}" == *.desktop && -f "${helper_path}" ) || -x "${helper_path}" ]]; then
+      log "Yardimci dosya hazir: ${helper_path}"
+    else
+      log "Yardimci dosya eksik: ${helper_path}"
+    fi
+  done
+
+  if target_user="$(resolve_wine_target_user_if_possible)"; then
+    home_dir="$(require_existing_user_home "${target_user}")"
+    prefix_dir="${home_dir}/${WINE_PREFIX_NAME}"
+    marker_file="${prefix_dir}/.etap-wine-config"
+    bootstrap_log="${home_dir}/.local/state/etap-wine-bootstrap.log"
+
+    log "Teshis hedef kullanicisi: ${target_user}"
+    log "Hedef kullanici ev dizini: ${home_dir}"
+    log "Wine prefix dizini: ${prefix_dir}"
+
+    if [[ -d "${prefix_dir}" ]]; then
+      log "Wine prefix dizini mevcut."
+    else
+      log "Wine prefix dizini bulunamadi."
+    fi
+
+    if [[ -f "${marker_file}" ]]; then
+      log "Wine marker dosyasi: ${marker_file}"
+      log "Wine marker icerigi: $(<"${marker_file}")"
+    else
+      log "Wine marker dosyasi bulunamadi: ${marker_file}"
+    fi
+
+    if [[ -f "${bootstrap_log}" ]]; then
+      log "Bootstrap gunlugu bulundu: ${bootstrap_log}"
+      if command -v tail >/dev/null 2>&1; then
+        while IFS= read -r line; do
+          log "BOOTSTRAP: ${line}"
+        done < <(tail -n 20 "${bootstrap_log}")
+      else
+        while IFS= read -r line; do
+          log "BOOTSTRAP: ${line}"
+        done <"${bootstrap_log}"
+      fi
+    else
+      log "Bootstrap gunlugu bulunamadi: ${bootstrap_log}"
+    fi
+  else
+    log "Teshis icin hedef kullanici belirlenemedi."
+  fi
+
+  log "Wine teshis raporu tamamlandi."
+}
+
 launch_winecfg_for_target_user() {
   local target_user home_dir env_args=()
 
@@ -5057,11 +6341,20 @@ run_wine_maintenance_mode() {
     wine-check)
       run_step "Wine durumunu kontrol etme" run_wine_verification_check
       ;;
+    wine-diag)
+      run_step "Wine teshis raporu olusturma" show_wine_diagnostic_report
+      ;;
     wine-version)
       run_step "Wine surum bilgisini gosterme" show_wine_versions
       ;;
     winecfg)
       run_step "Wine ayarlarini acma" launch_winecfg_for_target_user
+      ;;
+    wine-run-exe|wine-run-msi)
+      run_step "Wine ile dosya calistirma" launch_wine_file_for_target_user
+      ;;
+    wine-sync-shortcuts)
+      run_step "Wine kisayollarini senkronlama" sync_wine_shortcuts_for_target_user
       ;;
     wine-remove|wine-remove-purge-prefixes)
       run_step "Wine kurulumunu kaldirma" remove_wine_installation
@@ -5942,17 +7235,53 @@ require_commands_for_touch_calibration_mode() {
 }
 
 require_commands_for_eta_kayit_mode() {
-  require_command dpkg
-  require_command apt-get
   require_command dpkg-query
-  require_command rm
+
+  case "${ACTION_MODE}" in
+    eta-kayit-preflight)
+      require_command apt-cache
+      require_command dpkg
+      require_command find
+      require_command getent
+      require_command python3
+      ;;
+    *)
+      require_command dpkg
+      require_command apt-get
+      require_command rm
+      ;;
+  esac
+}
+
+require_commands_for_service_health_mode() {
+  require_command systemctl
+}
+
+require_commands_for_usb_mode() {
+  require_command lsblk
+
+  case "${ACTION_MODE}" in
+    usb-report)
+      ;;
+    usb-repair)
+      require_command fsck
+      require_command sync
+      require_command umount
+      ;;
+  esac
+}
+
+require_commands_for_resolution_mode() {
+  require_command getent
+  require_command runuser
+  require_command xrandr
 }
 
 require_commands_for_wine_mode() {
   require_command dpkg-query
 
   case "${ACTION_MODE}" in
-    wine-check|wine-version)
+    wine-check|wine-diag|wine-version)
       ;;
     wine-install)
       require_command apt-get
@@ -5963,6 +7292,15 @@ require_commands_for_wine_mode() {
     winecfg)
       require_command getent
       require_command id
+      require_command runuser
+      ;;
+    wine-run-exe|wine-run-msi)
+      require_command getent
+      require_command id
+      require_command runuser
+      ;;
+    wine-sync-shortcuts)
+      require_command getent
       require_command runuser
       ;;
     wine-remove|wine-remove-purge-prefixes)
@@ -5986,6 +7324,7 @@ install_launcher_dependencies() {
 
 main() {
   parse_args "$@"
+  enable_auto_report_capture_if_needed
   require_root
   assert_supported_os
   validate_settings
@@ -5998,6 +7337,21 @@ main() {
 
   if action_mode_is_touch_calibration; then
     run_touch_calibration_mode
+    return
+  fi
+
+  if action_mode_is_service_health; then
+    run_service_health_mode
+    return
+  fi
+
+  if action_mode_is_usb_repair; then
+    run_usb_repair_mode
+    return
+  fi
+
+  if action_mode_is_resolution_profiles; then
+    run_resolution_mode
     return
   fi
 
@@ -6066,7 +7420,7 @@ main() {
   fi
 
   if is_enabled "${ENABLE_EAG_CLIENT}"; then
-    run_step "e-ag-client paketini kurma" install_eag_client
+    run_step "e-ag-client (Ag Kontrol istemci) paketini kurma" install_eag_client
   fi
 
   if is_enabled "${ENABLE_ETA_QR_LOGIN}"; then

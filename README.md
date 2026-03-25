@@ -1,6 +1,6 @@
 # Pardus ETAP23 Kurulum ve Bakım Araçları
 
-Bu depo, ETAP23/Pardus cihazlarda ilk kurulum, dokunmatik sürücü bakımı, dokunmatik kalibrasyon, Wine işlemleri ve ETA Kayıt/Ahenk onarımı için kullanılan Bash betiklerini ve masaüstü başlatıcılarını içerir.
+Bu depo, ETAP23/Pardus cihazlarda ilk kurulum, dokunmatik sürücü bakımı, dokunmatik kalibrasyon, servis sağlığı kontrolü, USB onarımı, çözünürlük profilleri, Wine işlemleri ve ETA Kayıt/Ahenk onarımı için kullanılan Bash betiklerini ve masaüstü başlatıcılarını içerir.
 
 Bu araçlar, Selçuklu Mesleki ve Teknik Anadolu Lisesi ([seltem.meb.k12.tr](https://seltem.meb.k12.tr)) GençTek Özgür Yazılım Ekibi tarafından, danışman öğretmenleri [Adem YÜCE](https://ademyuce.tr) rehberliğinde, her kurulumda ayarları tek tek tekrar yapmamak ve yapılması gereken adımları atlamamak için hazırlandı.
 
@@ -13,9 +13,14 @@ Projede şu temel yetenekler bulunur:
 - İlk kurulum içinde isteğe bağlı sistem paket güncellemesi
 - Dokunmatik sürücü kurma, güncelleme, kontrol ve geri yükleme akışları
 - Ayrı dokunmatik kalibrasyon aracı
+- Servis sağlık paneli ve temel servis/timer yeniden başlatma akışları
+- USB depolama raporu ve dosya sistemi onarım aracı
+- 4K, FHD ve yerel çözünürlük profilleri
+- Ayrı log ve rapor görüntüleme aracı
 - ETA Kayıt ve Ahenk temizleme/onarma akışları
 - Wine ve winetricks ön hazırlığı
 - Bağımsız Wine kurulum/bakım aracı
+- EXE/MSI çalıştırma, kısayol senkronu ve Wine teşhis raporu
 - Boşta kapanma ve saatli kapanma ayarları
 
 ## Repo İçeriği
@@ -26,13 +31,75 @@ Projede şu temel yetenekler bulunur:
 | `setup_etap23_launcher.sh` | Grafik/terminal başlatıcı |
 | `ahenk_kaldir.sh` | ETA Kayıt onarımı için sarmalayıcı |
 | `dokunmatik_kalibrasyon.sh` | Dokunmatik kalibrasyon sarmalayıcısı |
+| `servis_saglik_paneli.sh` | Servis sağlık paneli sarmalayıcısı |
+| `usb_onarim_araci.sh` | USB rapor/onarma sarmalayıcısı |
+| `cozunurluk_profilleri.sh` | Çözünürlük profilleri sarmalayıcısı |
+| `log_rapor_araci.sh` | Rapor ve günlük görüntüleme aracı |
 | `wine_araci.sh` | Wine kurulum ve bakım sarmalayıcısı |
 | `ETAP23 Ilk Kurulum.desktop` | Ana kurulum kısayolu |
 | `ETAP Wine Araci.desktop` | Bağımsız Wine aracı kısayolu |
 | `ETA Dokunmatik Surucu Araci.desktop` | Dokunmatik sürücü bakım kısayolu |
 | `ETA Dokunmatik Kalibrasyon Araci.desktop` | Dokunmatik kalibrasyon kısayolu |
 | `ETA Kayit Duzelt Sifirla.desktop` | ETA Kayıt temizleme kısayolu |
-| `e-ag-client_2.9.3_amd64.deb` | Yerel kurulan e-ag istemci paketi |
+| `ETAP Servis Saglik Paneli.desktop` | Servis sağlık paneli kısayolu |
+| `ETA USB Onarim Araci.desktop` | USB onarım aracı kısayolu |
+| `ETAP Cozunurluk Profilleri.desktop` | Çözünürlük profilleri kısayolu |
+| `ETAP Log ve Rapor Araci.desktop` | Rapor ve günlük görüntüleyici kısayolu |
+| `e-ag-client_2.9.4.0_amd64.deb` | Yerel kurulan e-ag istemci paketi |
+
+## E-Ag Istemci
+
+Bu repoda ETAP/Pardus 23 tarafi icin Bayram KARAHAN tarafindan yayinlanan `e-ag-client_2.9.4.0_amd64.deb` paketi kullanilir. Paket metadatasinda `Package: e-ag-client`, `Version: 2.9.4.0`, `Maintainer: Bayram KARAHAN` ve `Description: e-ag Istemci Uygulamasi` bilgileri yer alir.
+
+Referanslar:
+
+- Bayram KARAHAN'in blog yazisi: [Ag Kontrol Yazilimi](https://bayramkarahan.blogspot.com/2019/07/ag-kontrol-yazlm.html)
+- Istemci repo adresi: [bayramkarahan/e-ag-client](https://github.com/bayramkarahan/e-ag-client)
+- Bu repoda kullanilan istemci paketi: [e-ag-client_2.9.4.0_amd64.deb](https://github.com/bayramkarahan/e-ag-client/raw/refs/heads/master/e-ag-client_2.9.4.0_amd64.deb)
+- Pardus Uygulamalari katalog girdisi: [E-Ag Uygulamasi (sunucu)](https://apps.pardus.org.tr/app/e-ag)
+- Sunucu repo adresi: [bayramkarahan/e-ag](https://github.com/bayramkarahan/e-ag)
+
+Not: Bu repo yalnizca `e-ag-client` istemci paketini kurar. Pardus Uygulamalari sayfasindaki `E-Ag Uygulamasi` ve `bayramkarahan/e-ag` deposu sunucu tarafini temsil eder; `e-ag` sunucu paketi bu kurulum akisinda kullanilmaz.
+
+Blog yazisinda anlatilan temel kullanim senaryolari:
+
+- agdaki acik bilgisayarlarda toplu Linux komutu calistirma
+- dosya kopyalama ve geri toplama
+- mesaj gonderme, ekran kilitleme ve kapatma
+- ekran erisimi, video yayini ve kamera yayini
+
+Kurulum ve kullanim:
+
+- ilk kurulum GUI'sinde `e-ag-client (Ag Kontrol istemci) paketini kur` secenegini isaretleyin
+- veya terminalden `sudo ./setup_etap23.sh --install-eag-client` calistirin
+- kurulumdan sonra uygulamayi menuden veya terminalden `e-ag-client-gui` komutuyla acin
+- oturum acilisinda istemci tepsi uygulamasi gerekirse `e-ag-client-tray` ile otomatik baslar
+- ayni yerel agdaki cihazlari secip Bayram KARAHAN'in blogunda anlatilan toplu yonetim islemlerini uygulayin
+
+## E-Ag Sunucu
+
+Sunucu paketi bu repo tarafindan otomatik kurulmaz. Merkezi yonetim yapacak cihazda ayri olarak manuel kurulmalidir. Paket metadatasinda `Package: e-ag`, `Version: 2.9.4.0`, `Maintainer: Bayram KARAHAN` ve `Description: e-ag Uzaktan Yonetim ve Goruntuleme Sunucusu` bilgileri yer alir.
+
+Referanslar:
+
+- Pardus Uygulamalari katalog girdisi: [E-Ag Uygulamasi](https://apps.pardus.org.tr/app/e-ag)
+- Sunucu repo adresi: [bayramkarahan/e-ag](https://github.com/bayramkarahan/e-ag)
+- Dogrudan sunucu paketi: [e-ag_2.9.4.0_amd64.deb](https://github.com/bayramkarahan/e-ag/raw/refs/heads/master/e-ag_2.9.4.0_amd64.deb)
+
+Manuel kurulum:
+
+```bash
+curl -L -o e-ag_2.9.4.0_amd64.deb https://github.com/bayramkarahan/e-ag/raw/refs/heads/master/e-ag_2.9.4.0_amd64.deb
+sudo apt install ./e-ag_2.9.4.0_amd64.deb
+```
+
+Alternatif olarak `sudo dpkg -i ./e-ag_2.9.4.0_amd64.deb` ve ardindan `sudo apt-get install -f -y` kullanilabilir.
+
+Kurulumdan sonra:
+
+- uygulamayi menuden veya `pkexec /usr/bin/e-ag` ile acin
+- `ssh.service`, `e-ag-networkprofil.service`, `e-ag-x11vnclogin.service` ve `e-ag-x11vncdesktop.service` birimlerinin durumunu kontrol edin
+- paket kurulumunun `gdm3` tarafinda Wayland'i kapatabildigini ve `xrdp` gunluklerini yeniden hazirladigini not edin
 
 ## Hızlı Başlangıç
 
@@ -49,31 +116,63 @@ Kurulum sonunda ETA Kayit acilacaksa betik once `eta-register` paketini kurar ve
 
 Yalnızca Wine ile ilgili işlemler için `ETAP Wine Araci.desktop` kısayolunu veya `./wine_araci.sh --gui` komutunu kullanabilirsiniz.
 Dokunmatik hizasi kaymissa `ETA Dokunmatik Kalibrasyon Araci.desktop` kisayolunu veya `./dokunmatik_kalibrasyon.sh --gui` komutunu kullanabilirsiniz.
+Servis durumlarina bakmak icin `ETAP Servis Saglik Paneli.desktop` veya `./servis_saglik_paneli.sh --gui`, USB denetimi icin `ETA USB Onarim Araci.desktop` veya `./usb_onarim_araci.sh --gui`, ekran profilleri icin `ETAP Cozunurluk Profilleri.desktop` veya `./cozunurluk_profilleri.sh --gui` kullanabilirsiniz.
+Kaydedilen rapor ve gunlukleri acmak icin `ETAP Log ve Rapor Araci.desktop` veya `./log_rapor_araci.sh --gui` kullanabilirsiniz.
 
 ## Sık Kullanılan Komutlar
 
 ```bash
 sudo ./setup_etap23.sh --non-interactive --board-name etap-tahta-01
 sudo ./setup_etap23.sh --upgrade-packages
+sudo ./setup_etap23.sh --install-eag-client
 sudo ./setup_etap23.sh --touchdrv-upgrade
 sudo ./setup_etap23.sh --touchdrv-only-upgrade
 sudo ./setup_etap23.sh --touchdrv-check
 sudo ./setup_etap23.sh --touchdrv-rollback
 sudo ./setup_etap23.sh --touch-calibration-start
 sudo ./setup_etap23.sh --touch-calibration-status
+sudo ./setup_etap23.sh --service-health-check
+sudo ./setup_etap23.sh --service-health-restart NetworkManager.service
+sudo ./setup_etap23.sh --usb-report
+sudo ./setup_etap23.sh --usb-repair /dev/sdb
+sudo ./setup_etap23.sh --resolution-status
+sudo ./setup_etap23.sh --resolution-profile 4k
 sudo ./dokunmatik_kalibrasyon.sh --reset
 sudo ./setup_etap23.sh --wine-install
 sudo ./setup_etap23.sh --wine-check
+sudo ./setup_etap23.sh --wine-diag
 sudo ./setup_etap23.sh --winecfg
+sudo ./setup_etap23.sh --wine-run-exe "/yol/ornek-uygulama.exe"
+sudo ./setup_etap23.sh --wine-run-msi "/yol/ornek-kurulum.msi"
+sudo ./setup_etap23.sh --wine-sync-shortcuts
+sudo ./setup_etap23.sh --eta-kayit-preflight
 sudo ./setup_etap23.sh --eta-kayit-repair
 sudo ./setup_etap23.sh --eta-kayit-repair-full-upgrade
 sudo ./wine_araci.sh --install-vulkan
+sudo ./wine_araci.sh --diag
+sudo ./wine_araci.sh --run-exe "/yol/ornek-uygulama.exe"
+sudo ./wine_araci.sh --run-msi "/yol/ornek-kurulum.msi"
+sudo ./wine_araci.sh --sync-shortcuts
+sudo ./ahenk_kaldir.sh --preflight
+./servis_saglik_paneli.sh --gui
+./usb_onarim_araci.sh --gui
+./cozunurluk_profilleri.sh --gui
+./log_rapor_araci.sh --latest-report
+./log_rapor_araci.sh --gui
 sudo ./wine_araci.sh --rebuild-prefix --wine-user etapadmin
 sudo ./ahenk_kaldir.sh --reinstall-ahenk
 sudo ./ahenk_kaldir.sh --full-upgrade
 ```
 
 - `--touchdrv-check` ve grafik dokunmatik araci, kontrol sonunda kurulu surumu, `systemctl status eta-touchdrv` icindeki servis durumunu ve oneriyi ayri bir ozet olarak gosterir.
+- `--touchdrv-check`, `--touch-calibration-status`, `--wine-check`, `--wine-diag`, `--eta-kayit-preflight`, `--service-health-check`, `--usb-report` ve `--resolution-status` kipleri varsayilan olarak betiklerin bulundugu klasore `rapor-*.log` olarak kaydeder. Klasor yazilabilir degilse `/tmp/etap23-reports` kullanilir. Farkli bir hedef icin `--report-file DOSYA` kullanabilirsiniz.
+- Olusan raporlarin basina tahta adi, MAC adresi ve IP adresi de eklenir.
+- `--install-eag-client` secenegi artik varsayilan olarak yerel `e-ag-client_2.9.4.0_amd64.deb` paketini kullanir.
+- `--eta-kayit-preflight` ve `ahenk_kaldir.sh --preflight`, ETA Kayit oncesi paket, runtime, aktif yonetici oturumu, temel ag, USB depolama aygitlari ve Ahenk kayit izlerini raporlar.
+- `--service-health-check`, ETAP tarafinda kritik servis ve timer birimlerinin durumunu tek raporda toplar; `--service-health-restart BIRIM` desteklenen birimi yeniden baslatir.
+- `--usb-report`, bagli USB depolama aygitlarini ve onarimda kullanilacak hedefleri listeler; `--usb-repair /dev/sdX`, bagli aygit icin ayri baglanan bolumleri kapatip `fsck -a` dener.
+- `--resolution-status`, aktif X11 oturumunda bagli ekran cikislarini ve 4K/FHD uygunlugunu raporlar; `--resolution-profile 4k|fhd|native` secilen cikisa profili uygular.
+- `log_rapor_araci.sh`, betik klasorundeki `rapor-*.log` dosyalarini, eski `reports/` altindaki raporlari, diger `.log` dosyalarini ve bulunursa Wine bootstrap gunlugunu tek yerden acar.
 - İlk kurulum ekranindaki `Kurulu sistem paketlerini guncelle` secenegi, önce `apt-get update`, sonra `apt-get upgrade -y` calistirir.
 - `Dokunmatik surucusunu guncellemeyi engelle` secenegi aciksa, genel paket guncellemesinde de `eta-touchdrv` gecici hold ile atlanir.
 - İlk kurulum sonunda ETA Kayit acilacaksa betik acilistan hemen once `eta-register` paketini kurar veya gunceller; guncelleme basarisiz olsa bile paket zaten kuruluysa mevcut surum ile devam eder.
@@ -94,16 +193,24 @@ Bağımsız Wine aracı, `setup_etap23.sh` içindeki merkezi Wine kiplerini tek 
 sudo ./wine_araci.sh --install
 sudo ./wine_araci.sh --install-vulkan
 sudo ./wine_araci.sh --check
+sudo ./wine_araci.sh --diag
 sudo ./wine_araci.sh --version
 sudo ./wine_araci.sh --winecfg
+sudo ./wine_araci.sh --run-exe "/yol/ornek-uygulama.exe"
+sudo ./wine_araci.sh --run-msi "/yol/ornek-kurulum.msi"
+sudo ./wine_araci.sh --sync-shortcuts
 sudo ./wine_araci.sh --remove
 sudo ./wine_araci.sh --remove-purge-prefixes
 ```
 
 - `--gui` grafik arayüzü açar; `zenity` yoksa terminal menüsü gösterilir.
 - Grafik modda `Wine durumunu kontrol et` ve `Wine sürümlerini göster` seçenekleri sonucu ayrı bir pencereye yazar; pencere kapanınca Wine aracı menüsü tekrar açılır.
+- `--diag` aktif oturum, Wine yardımcıları, prefix durumu ve bootstrap günlüğü ile ayrıntılı tanı raporu üretir.
+- `--check` ve `--diag` calistiginda rapor dosyasi otomatik kaydedilir; gerekirse `--report-file DOSYA` ile ozel yol verilebilir.
 - `--install` yalnızca Wine ve winetricks kurulum/güncelleme akışlarını çalıştırır.
 - `--install-vulkan` aynı kuruluma `dxvk` ve `vkd3d` adımlarını ekler.
+- `--run-exe` ve `--run-msi`, seçilen kullanıcı için açık grafik oturumunda kurulum/uygulama başlatır.
+- `--sync-shortcuts`, Wine profilindeki ve Linux `.desktop` kısayollarını masaüstüne yeniden senkronlar.
 - Kurulum, Wine temel font paketlerini (`fonts-wine`, `fonts-liberation2`, `fonts-dejavu-core`) de yükler ve prefix içinde font taramasını yeniler.
 - Wine ile kurulan uygulamaların Linux `.desktop` kısayolları ile Wine profilindeki `Desktop` ve `Start Menu` `.lnk` kısayolları kullanıcının gerçek masaüstüne de senkronlanır. Senkron işi `/usr/local/libexec/etap-wine-sync-shortcuts` ile yapılır.
 - Mevcut kullanıcıların Wine prefix'i kurulum sırasında hazırlanır; yeni oluşturulan kullanıcılar için ise ilk grafik oturumunda `/etc/xdg/autostart/etap-wine-session-bootstrap.desktop` üzerinden otomatik hazırlanır.
