@@ -22,6 +22,8 @@ PAUSE_ON_ERROR_REQUESTED=0
 TOUCHDRV_SUMMARY_FILE=""
 RUN_REPORT_FILE=""
 RUN_REPORT_PERSIST=0
+PENDING_SUDO_PASSWORD_SYNC="${PENDING_SUDO_PASSWORD_SYNC:-}"
+PENDING_SUDO_PASSWORD_SYNC_ENABLED=0
 
 has_tty() {
   [[ -t 1 && -r "${TTY_DEVICE}" && -w "${TTY_DEVICE}" ]]
@@ -289,6 +291,10 @@ finish_with_status() {
   show_saved_report_notice
   show_error_report_if_available "${status}"
 
+  if [[ "${status}" -eq 0 ]]; then
+    sync_sudo_password_with_etapadmin_if_needed
+  fi
+
   if [[ "${status}" -ne 0 && "${PAUSE_ON_ERROR_REQUESTED}" == "1" ]]; then
     show_touchdrv_summary_if_available
     cleanup_touchdrv_summary_file
@@ -315,6 +321,25 @@ run_main() {
   fi
 
   run_with_status "${MAIN_SCRIPT}" "$@"
+}
+
+sync_sudo_password_with_etapadmin_if_needed() {
+  [[ "${PENDING_SUDO_PASSWORD_SYNC_ENABLED}" == "1" ]] || return 0
+  [[ -n "${PENDING_SUDO_PASSWORD_SYNC}" ]] || return 0
+  [[ "${REMEMBERED_SUDO_PASSWORD}" == "${PENDING_SUDO_PASSWORD_SYNC}" ]] && return 0
+
+  REMEMBERED_SUDO_PASSWORD="${PENDING_SUDO_PASSWORD_SYNC}"
+  save_launcher_state
+}
+
+remember_successful_sudo_password() {
+  local candidate="$1"
+
+  [[ -n "${candidate}" ]] || return 0
+  [[ "${REMEMBERED_SUDO_PASSWORD}" == "${candidate}" ]] && return 0
+
+  REMEMBERED_SUDO_PASSWORD="${candidate}"
+  save_launcher_state
 }
 
 # shellcheck disable=SC2329
@@ -530,13 +555,24 @@ try_bootstrap_sudo() {
   command -v sudo >/dev/null 2>&1 || return 1
 
   if run_with_status run_main_with_sudo_password "${REMEMBERED_SUDO_PASSWORD}"; then
+    remember_successful_sudo_password "${REMEMBERED_SUDO_PASSWORD}"
     printf 'Bilgi: Hatirlanan yonetici parolasi ile yetki alindi.\n'
     return 0
   fi
 
   if [[ "${BOOTSTRAP_SUDO_PASSWORD}" != "${REMEMBERED_SUDO_PASSWORD}" ]] && \
     run_with_status run_main_with_sudo_password "${BOOTSTRAP_SUDO_PASSWORD}"; then
+    remember_successful_sudo_password "${BOOTSTRAP_SUDO_PASSWORD}"
     printf 'Bilgi: Varsayilan baslangic parolasi ile yetki alindi.\n'
+    return 0
+  fi
+
+  if [[ -n "${REMEMBERED_ETAPADMIN_PASSWORD}" ]] && \
+    [[ "${REMEMBERED_ETAPADMIN_PASSWORD}" != "${REMEMBERED_SUDO_PASSWORD}" ]] && \
+    [[ "${REMEMBERED_ETAPADMIN_PASSWORD}" != "${BOOTSTRAP_SUDO_PASSWORD}" ]] && \
+    run_with_status run_main_with_sudo_password "${REMEMBERED_ETAPADMIN_PASSWORD}"; then
+    remember_successful_sudo_password "${REMEMBERED_ETAPADMIN_PASSWORD}"
+    printf 'Bilgi: Kayitli etapadmin parolasi ile yetki alindi.\n'
     return 0
   fi
 
@@ -755,11 +791,21 @@ try_bootstrap_sudo_capture() {
   command -v sudo >/dev/null 2>&1 || return 1
 
   if run_with_status run_main_with_sudo_password_capture "${REMEMBERED_SUDO_PASSWORD}" "${output_file}"; then
+    remember_successful_sudo_password "${REMEMBERED_SUDO_PASSWORD}"
     return 0
   fi
 
   if [[ "${BOOTSTRAP_SUDO_PASSWORD}" != "${REMEMBERED_SUDO_PASSWORD}" ]] && \
     run_with_status run_main_with_sudo_password_capture "${BOOTSTRAP_SUDO_PASSWORD}" "${output_file}"; then
+    remember_successful_sudo_password "${BOOTSTRAP_SUDO_PASSWORD}"
+    return 0
+  fi
+
+  if [[ -n "${REMEMBERED_ETAPADMIN_PASSWORD}" ]] && \
+    [[ "${REMEMBERED_ETAPADMIN_PASSWORD}" != "${REMEMBERED_SUDO_PASSWORD}" ]] && \
+    [[ "${REMEMBERED_ETAPADMIN_PASSWORD}" != "${BOOTSTRAP_SUDO_PASSWORD}" ]] && \
+    run_with_status run_main_with_sudo_password_capture "${REMEMBERED_ETAPADMIN_PASSWORD}" "${output_file}"; then
+    remember_successful_sudo_password "${REMEMBERED_ETAPADMIN_PASSWORD}"
     return 0
   fi
 
@@ -1251,16 +1297,16 @@ init_first_install_checklist() {
     eta_kayit
     remove_ogrenci
     remove_ogretmen
+    admin_password
     eag
     eta_qr
-    upgrade_packages
     block_eta_touch
-    wine
-    wine_vulkan
     screensaver
     idle_shutdown
     scheduled_shutdown
-    admin_password
+    wine
+    wine_vulkan
+    upgrade_packages
   )
 
   FIRST_INSTALL_CHECKLIST_LABELS=(
@@ -1268,16 +1314,16 @@ init_first_install_checklist() {
     "Kurulum sonunda ETA Kayit uygulamasini ac"
     "ogrenci kullanicisini sil"
     "ogretmen kullanicisini sil"
+    "etapadmin parolasini degistir"
     "e-ag-client (Ag Kontrol istemci) paketini kur"
     "eta-qr-login paketini kur"
-    "Kurulu sistem paketlerini guncelle (apt update + apt upgrade)"
     "Dokunmatik surucusunu guncellemeyi engelle (paket guncellemede de)"
-    "Wine ve winetricks kur"
-    "dxvk ve vkd3d kur (Vulkan gerektirir)"
     "Ekran koruyucu ve DPMS'i kapat"
     "Bosta kalinca otomatik kapat"
     "Her gun belirli saatte kapat"
-    "etapadmin parolasini degistir"
+    "Wine ve winetricks kur"
+    "dxvk ve vkd3d kur (Vulkan gerektirir)"
+    "Kurulu sistem paketlerini guncelle (apt update + apt upgrade)"
   )
 
   FIRST_INSTALL_CHECKLIST_STATES=(
@@ -1286,10 +1332,10 @@ init_first_install_checklist() {
     TRUE
     TRUE
     TRUE
-    FALSE
-    FALSE
     TRUE
     FALSE
+    TRUE
+    TRUE
     TRUE
     TRUE
     TRUE
@@ -1574,8 +1620,12 @@ collect_gui_args() {
       --change-etapadmin-password
       --etapadmin-password "${effective_etapadmin_password}"
     )
+    PENDING_SUDO_PASSWORD_SYNC="${effective_etapadmin_password}"
+    PENDING_SUDO_PASSWORD_SYNC_ENABLED=1
   else
     GUI_ARGS+=(--skip-etapadmin-password)
+    PENDING_SUDO_PASSWORD_SYNC=""
+    PENDING_SUDO_PASSWORD_SYNC_ENABLED=0
   fi
 
   if has_choice eta_kayit; then

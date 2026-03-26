@@ -4,6 +4,8 @@ Bu depo için destek isterken önce aşağıdaki kaynakları kontrol edin:
 
 - [README.md](README.md)
 - [docs/KULLANIM_KILAVUZU.md](docs/KULLANIM_KILAVUZU.md)
+- [docs/SSS_SORUN_GIDERME.md](docs/SSS_SORUN_GIDERME.md)
+- [docs/YAZICI_REHBERLERI.md](docs/YAZICI_REHBERLERI.md)
 - [SECURITY.md](SECURITY.md)
 
 ## Hangi Durumda Ne Açmalı?

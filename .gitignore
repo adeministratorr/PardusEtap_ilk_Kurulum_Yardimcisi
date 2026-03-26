@@ -10,3 +10,6 @@
 *.swo
 *~
 wordpress_makale_etap23_pardus_ai_seo.md
+
+# Local-only security research artifacts
+/private/

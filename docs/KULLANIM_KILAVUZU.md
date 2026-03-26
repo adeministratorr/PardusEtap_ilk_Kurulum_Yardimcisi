@@ -14,6 +14,7 @@ Bu repo şu senaryoları hızlandırmak için hazırlandı:
 - USB depolama aygıtlarının raporlanması ve onarımı
 - 4K, FHD ve yerel çözünürlük profillerinin hızlı uygulanması
 - Ayrı bir araçla kaydedilmiş rapor ve günlükleri görüntüleme
+- Yazici, dosya paylasim ve paket/surucu sorunlari icin hizli destek notlari saglanmasi
 - ETA Kayıt ve Ahenk tarafında bozulan kayıt akışlarının temizlenmesi
 - Wine/winetricks tabanlı bileşenlerin standart bir sırayla hazırlanması
 - Öğretmenler ya da Yeğitek Okul Sorumluları için terminal ve grafik arayüzlü iki farklı çalışma yöntemi sunulması
@@ -30,6 +31,7 @@ Bu repo şu senaryoları hızlandırmak için hazırlandı:
 | `usb_onarim_araci.sh` | USB rapor/onarma sarmalayıcısı |
 | `cozunurluk_profilleri.sh` | Çözünürlük profilleri sarmalayıcısı |
 | `log_rapor_araci.sh` | Rapor ve günlük görüntüleme aracı |
+| `sss_destek_araci.sh` | Yazici, dosya paylasim ve surucu kontrol araci |
 | `wine_araci.sh` | Bağımsız Wine kurulum ve bakım sarmalayıcısı |
 | `ETAP23 Ilk Kurulum.desktop` | Ana kurulum başlatıcısı |
 | `ETAP Wine Araci.desktop` | Wine aracı başlatıcısı |
@@ -40,6 +42,7 @@ Bu repo şu senaryoları hızlandırmak için hazırlandı:
 | `ETA USB Onarim Araci.desktop` | USB onarım aracı başlatıcısı |
 | `ETAP Cozunurluk Profilleri.desktop` | Çözünürlük profilleri başlatıcısı |
 | `ETAP Log ve Rapor Araci.desktop` | Rapor ve günlük görüntüleyici başlatıcısı |
+| `ETAP SSS ve Destek Araci.desktop` | Yazici/paylasim/surucu destek başlatıcısı |
 | `e-ag-client_2.9.4.0_amd64.deb` | Yerelden kurulan e-ag istemci paketi |
 
 ### 2.1 e-ag Paketi ve Kaynaklar
@@ -151,7 +154,7 @@ Bu modda betik adım adım soru sorar. Enter tuşu ile varsayılan seçenek koru
 3. Gerekli seçimleri tamamlayın.
 4. Başlatıcı yetki alıp `setup_etap23.sh` betiğini uygun argümanlarla çalıştırır.
 
-İlk kurulum seçim listesinde `Kurulu sistem paketlerini guncelle (apt update + apt upgrade)` ve varsayılan olarak seçili olmayan `Dokunmatik surucusunu guncellemeyi engelle (paket guncellemede de)` seçenekleri de yer alır.
+İlk kurulum seçim listesinde varsayılan olarak seçili `Kurulu sistem paketlerini guncelle (apt update + apt upgrade)` ve varsayılan olarak seçili olmayan `Dokunmatik surucusunu guncellemeyi engelle (paket guncellemede de)` seçenekleri de yer alır. `Kurulu sistem paketlerini guncelle` listenin en sonunda bulunur; `Wine ve winetricks kur` seçeneği de varsayılan olarak işaretlidir.
 Kurulum sonunda ETA Kayit acilacaksa betik uygulamayi baslatmadan hemen once `eta-register` paketini kurar veya gunceller.
 
 ### 5.3 Etkileşimsiz kurulum
@@ -176,12 +179,14 @@ Pardus/
 ├── ETA Dokunmatik Surucu Araci.desktop
 ├── ETA Kayit Duzelt Sifirla.desktop
 ├── ETAP Log ve Rapor Araci.desktop
+├── ETAP SSS ve Destek Araci.desktop
 ├── ETA USB Onarim Araci.desktop
 ├── ahenk_kaldir.sh
 ├── cozunurluk_profilleri.sh
 ├── dokunmatik_kalibrasyon.sh
 ├── e-ag-client_2.9.4.0_amd64.deb
 ├── log_rapor_araci.sh
+├── sss_destek_araci.sh
 ├── servis_saglik_paneli.sh
 ├── setup_etap23.sh
 ├── setup_etap23_launcher.sh
@@ -198,18 +203,19 @@ Pardus/
 Bu başlatıcı şu seçenekleri yönetir:
 
 - Tahta adını değiştirme
+- Kurulu sistem paketlerini güncelleme
 - `ogrenci` kullanıcısını silme
 - `ogretmen` kullanıcısını silme
+- `etapadmin` parolasını değiştirme
 - `e-ag-client (Ag Kontrol istemci)` paketini kurma
 - `eta-qr-login` kurma
 - `eta-touchdrv` kurma veya güncelleme
-- Wine ve winetricks kurma
-- İsteğe bağlı `dxvk` ve `vkd3d` kurulumu
 - Ekran koruyucu/DPMS kapatma
 - Boşta kapanma ayarı
 - Saatli kapanma ayarı
-- `etapadmin` parolasını değiştirme
 - Kurulum sonunda ETA Kayıt uygulamasını açma
+- Wine ve winetricks kurma
+- İsteğe bağlı `dxvk` ve `vkd3d` kurulumu
 
 ### 7.2 ETAP Wine Aracı
 
@@ -280,6 +286,16 @@ Bu akış `log_rapor_araci.sh --gui` üzerinden şu işlemleri yönetir:
 - Kayıtlı rapor ve günlükleri listeden seçerek açma
 - Mevcut rapor/günlük envanterini tek pencerede gösterme
 
+### 7.9 ETAP SSS ve Destek Aracı
+
+Bu akış `sss_destek_araci.sh --gui` üzerinden şu işlemleri yönetir:
+
+- CUPS, tanimli yazicilar ve yazici baglanti arka uclari icin hizli rapor alma
+- Gerektiğinde `cups.service` birimini yeniden başlatma
+- SMB/CIFS ve NFS istemci hazirligini raporlama
+- Belirli paket/suruculer icin `dpkg-query` ve `apt-cache policy` ozeti alma
+- ETAP rehberindeki Kyocera yazici kurulum adimlarini tek pencerede ozetleme
+
 ## 8. Terminalden Kullanım
 
 ### 8.1 En sık kullanılan komutlar
@@ -324,6 +340,15 @@ sudo ./ahenk_kaldir.sh --preflight
 ./cozunurluk_profilleri.sh --gui
 ./log_rapor_araci.sh --latest-report
 ./log_rapor_araci.sh --gui
+./sss_destek_araci.sh --gui
+./sss_destek_araci.sh --printer-report
+./sss_destek_araci.sh --file-share-report
+./sss_destek_araci.sh --driver-check kyodialog
+./sss_destek_araci.sh --printer-guides
+./sss_destek_araci.sh --kyocera-guide
+./sss_destek_araci.sh --kyocera-local-status
+./sss_destek_araci.sh --kyocera-local-prepare
+sudo ./sss_destek_araci.sh --kyocera-local-install
 sudo ./wine_araci.sh --rebuild-prefix --wine-user etapadmin
 sudo ./wine_araci.sh --remove-purge-prefixes
 sudo ./ahenk_kaldir.sh
@@ -662,6 +687,31 @@ Not: Çözünürlük profilleri aktif X11 oturumu gerektirir. Wayland veya kapal
 
 Bu akış özellikle sahada alınan kontrol raporlarını sonradan açmak için uygundur.
 
+### 12.11 Yazici kurulumu, dosya paylasimi veya Kyocera surucusu gerekiyorsa
+
+```bash
+./sss_destek_araci.sh --printer-report
+./sss_destek_araci.sh --file-share-report
+./sss_destek_araci.sh --driver-check kyodialog
+./sss_destek_araci.sh --printer-guides
+./sss_destek_araci.sh --kyocera-guide
+./sss_destek_araci.sh --kyocera-local-status
+./sss_destek_araci.sh --kyocera-local-prepare
+```
+
+Onerilen sira:
+
+1. Once yazici durum raporunu alin.
+2. Gerekirse `--printer-guides` ile ETAP rehberindeki Brother, Epson, HP, Canon ve genel yazici adimlarinin toplu ozetini acin.
+3. Yazici servisinin calisip calismadigini kontrol edin.
+4. Ag klasorune tarama veya dosya alma sorununda dosya paylasim raporuna bakin.
+5. Kyocera tarafinda ETAP rehberindeki adimlari izleyip `kyodialog` ve model surucusunu ayri ayri dogrulayin.
+6. Bu repoda `private/kyocera/fs-1120mfp/` altina indirilen yerel bundle varsa `--kyocera-local-prepare` ile cikartip Pardus cihazda `sudo ./sss_destek_araci.sh --kyocera-local-install` kullanin.
+
+Toplu rehber notlarinin dokuman karsiligi:
+
+- [docs/YAZICI_REHBERLERI.md](YAZICI_REHBERLERI.md)
+
 ## 13. Doğrulama Komutları
 
 Dokunmatik sürücüyü elle kontrol etmek için:
@@ -684,6 +734,16 @@ USB aygıtlarını elle doğrulamak için:
 ```bash
 lsblk -o NAME,TRAN,RM,SIZE,MODEL,MOUNTPOINT
 sudo fsck -N /dev/sdb1
+```
+
+Yazici ve paylasim tarafini elle dogrulamak icin:
+
+```bash
+systemctl status cups.service
+lpstat -r
+lpstat -t
+lpinfo -v
+smbclient -L //SUNUCU -U KULLANICI
 ```
 
 Çözünürlük durumunu elle doğrulamak için:
@@ -793,6 +853,8 @@ Bu repoya GitHub tarafında hazırlanan dosyalar:
 - `.github/ISSUE_TEMPLATE/feature_request.yml`
 - `.github/pull_request_template.md`
 - `.github/workflows/shell-lint.yml`
+- `.github/workflows/spellcheck-lint.yml`
+- `.typos.toml`
 - `CONTRIBUTING.md`
 - `SECURITY.md`
 - `SUPPORT.md`
@@ -800,7 +862,7 @@ Bu repoya GitHub tarafında hazırlanan dosyalar:
 Önerilen iş akışları:
 
 1. Değişiklikten önce issue açın veya mevcut issue'yu bağlayın.
-2. Script değişikliğinde `bash -n` ve mümkünse `shellcheck` çalıştırın.
+2. Script değişikliğinde `bash -n` ve mümkünse `shellcheck` çalıştırın; dokümantasyon ve metin değişikliklerinde spellcheck lint sonucunu da kontrol edin.
 3. Davranış değiştiyse `README` ve bu kılavuzu birlikte güncelleyin.
 4. PR açarken değişikliğin kurulum akışına etkisini ve geri dönüş planını yazın.
 

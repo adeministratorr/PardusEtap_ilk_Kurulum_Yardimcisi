@@ -1,6 +1,6 @@
 # Pardus ETAP23 Kurulum ve Bakım Araçları
 
-Bu depo, ETAP23/Pardus cihazlarda ilk kurulum, dokunmatik sürücü bakımı, dokunmatik kalibrasyon, servis sağlığı kontrolü, USB onarımı, çözünürlük profilleri, Wine işlemleri ve ETA Kayıt/Ahenk onarımı için kullanılan Bash betiklerini ve masaüstü başlatıcılarını içerir.
+Bu depo, ETAP23/Pardus cihazlarda ilk kurulum, dokunmatik sürücü bakımı, dokunmatik kalibrasyon, servis sağlığı kontrolü, USB onarımı, çözünürlük profilleri, Wine işlemleri, ETA Kayıt/Ahenk onarımı ve sik gelen destek sorulari icin kullanilan Bash betiklerini ve masaustu baslaticilarini icerir.
 
 Bu araçlar, Selçuklu Mesleki ve Teknik Anadolu Lisesi ([seltem.meb.k12.tr](https://seltem.meb.k12.tr)) GençTek Özgür Yazılım Ekibi tarafından, danışman öğretmenleri [Adem YÜCE](https://ademyuce.tr) rehberliğinde, her kurulumda ayarları tek tek tekrar yapmamak ve yapılması gereken adımları atlamamak için hazırlandı.
 
@@ -17,6 +17,7 @@ Projede şu temel yetenekler bulunur:
 - USB depolama raporu ve dosya sistemi onarım aracı
 - 4K, FHD ve yerel çözünürlük profilleri
 - Ayrı log ve rapor görüntüleme aracı
+- Yazici, dosya paylasim ve surucu/paket sorunlari icin ayri SSS/destek araci
 - ETA Kayıt ve Ahenk temizleme/onarma akışları
 - Wine ve winetricks ön hazırlığı
 - Bağımsız Wine kurulum/bakım aracı
@@ -35,6 +36,7 @@ Projede şu temel yetenekler bulunur:
 | `usb_onarim_araci.sh` | USB rapor/onarma sarmalayıcısı |
 | `cozunurluk_profilleri.sh` | Çözünürlük profilleri sarmalayıcısı |
 | `log_rapor_araci.sh` | Rapor ve günlük görüntüleme aracı |
+| `sss_destek_araci.sh` | Yazici, dosya paylasim ve paket/surucu destek araci |
 | `wine_araci.sh` | Wine kurulum ve bakım sarmalayıcısı |
 | `ETAP23 Ilk Kurulum.desktop` | Ana kurulum kısayolu |
 | `ETAP Wine Araci.desktop` | Bağımsız Wine aracı kısayolu |
@@ -45,6 +47,7 @@ Projede şu temel yetenekler bulunur:
 | `ETA USB Onarim Araci.desktop` | USB onarım aracı kısayolu |
 | `ETAP Cozunurluk Profilleri.desktop` | Çözünürlük profilleri kısayolu |
 | `ETAP Log ve Rapor Araci.desktop` | Rapor ve günlük görüntüleyici kısayolu |
+| `ETAP SSS ve Destek Araci.desktop` | Yazici/paylasim/surucu sorun giderme kisayolu |
 | `e-ag-client_2.9.4.0_amd64.deb` | Yerel kurulan e-ag istemci paketi |
 
 ## E-Ag Istemci
@@ -110,7 +113,7 @@ sudo ./setup_etap23.sh
 ```
 
 Grafik akışı tercih ediyorsanız `ETAP23 Ilk Kurulum.desktop` dosyasını çift tıklayın. `zenity` yoksa başlatıcı terminal moduna geri düşer. İlk ekrandaki checkbox listesinden `Tumunu Sec` ve `Tumunu Kaldir` butonlarıyla tüm adımları tek seferde işaretleyebilir veya temizleyebilirsiniz.
-İlk kurulum listesinde ayrıca `Kurulu sistem paketlerini guncelle (apt update + apt upgrade)` ve varsayılan olarak seçili olmayan `Dokunmatik surucusunu guncellemeyi engelle (paket guncellemede de)` seçenekleri bulunur.
+İlk kurulum listesinde ayrıca varsayılan olarak seçili `Kurulu sistem paketlerini guncelle (apt update + apt upgrade)` ve varsayılan olarak seçili olmayan `Dokunmatik surucusunu guncellemeyi engelle (paket guncellemede de)` seçenekleri bulunur. `Kurulu sistem paketlerini guncelle` listenin en sonunda yer alır; `Wine ve winetricks kur` seçeneği de varsayılan olarak işaretlidir.
 İlk kurulum GUI'sindeki `Mevcut Yonetici Parolasi` alanı `sudo` yetkisini otomatik alabilmek için kullanılabilir. Boş bırakırsanız başlatıcı önce kayıtlı parolayı, yoksa varsayılan `etap+pardus!` değerini dener. `etapadmin` alanları boş bırakılırsa başlatıcı önce yerelde kayıtlı `etapadmin` parolasını, sonra ortamdan verilen `ETAPADMIN_PASSWORD_DEFAULT` değerini dener; ikisi de yoksa parola adımını uyarı vererek atlar. GUI, `etapadmin` parolasını ekranda göstermez. Metin kutusuna yeni parola yazılırsa bu değer yerelde saklanır.
 Kurulum sonunda ETA Kayit acilacaksa betik once `eta-register` paketini kurar veya gunceller, sonra uygulamayi baslatir.
 
@@ -118,6 +121,7 @@ Yalnızca Wine ile ilgili işlemler için `ETAP Wine Araci.desktop` kısayolunu 
 Dokunmatik hizasi kaymissa `ETA Dokunmatik Kalibrasyon Araci.desktop` kisayolunu veya `./dokunmatik_kalibrasyon.sh --gui` komutunu kullanabilirsiniz.
 Servis durumlarina bakmak icin `ETAP Servis Saglik Paneli.desktop` veya `./servis_saglik_paneli.sh --gui`, USB denetimi icin `ETA USB Onarim Araci.desktop` veya `./usb_onarim_araci.sh --gui`, ekran profilleri icin `ETAP Cozunurluk Profilleri.desktop` veya `./cozunurluk_profilleri.sh --gui` kullanabilirsiniz.
 Kaydedilen rapor ve gunlukleri acmak icin `ETAP Log ve Rapor Araci.desktop` veya `./log_rapor_araci.sh --gui` kullanabilirsiniz.
+Yazici kurulumu, dosya paylasimi ve surucu/paket kontrolleri icin `ETAP SSS ve Destek Araci.desktop` veya `./sss_destek_araci.sh --gui` kullanabilirsiniz.
 
 ## Sık Kullanılan Komutlar
 
@@ -159,6 +163,15 @@ sudo ./ahenk_kaldir.sh --preflight
 ./cozunurluk_profilleri.sh --gui
 ./log_rapor_araci.sh --latest-report
 ./log_rapor_araci.sh --gui
+./sss_destek_araci.sh --gui
+./sss_destek_araci.sh --printer-report
+./sss_destek_araci.sh --file-share-report
+./sss_destek_araci.sh --driver-check kyodialog
+./sss_destek_araci.sh --printer-guides
+./sss_destek_araci.sh --kyocera-guide
+./sss_destek_araci.sh --kyocera-local-status
+./sss_destek_araci.sh --kyocera-local-prepare
+sudo ./sss_destek_araci.sh --kyocera-local-install
 sudo ./wine_araci.sh --rebuild-prefix --wine-user etapadmin
 sudo ./ahenk_kaldir.sh --reinstall-ahenk
 sudo ./ahenk_kaldir.sh --full-upgrade
@@ -173,6 +186,8 @@ sudo ./ahenk_kaldir.sh --full-upgrade
 - `--usb-report`, bagli USB depolama aygitlarini ve onarimda kullanilacak hedefleri listeler; `--usb-repair /dev/sdX`, bagli aygit icin ayri baglanan bolumleri kapatip `fsck -a` dener.
 - `--resolution-status`, aktif X11 oturumunda bagli ekran cikislarini ve 4K/FHD uygunlugunu raporlar; `--resolution-profile 4k|fhd|native` secilen cikisa profili uygular.
 - `log_rapor_araci.sh`, betik klasorundeki `rapor-*.log` dosyalarini, eski `reports/` altindaki raporlari, diger `.log` dosyalarini ve bulunursa Wine bootstrap gunlugunu tek yerden acar.
+- `sss_destek_araci.sh`, CUPS durumu, dosya paylasim istemcileri, belirli paketlerin kurulum durumu ve ETAP rehberindeki `12.3 Yazicilar` alt basliklarinin ozetini tek arac altinda toplar.
+- Kyocera icin ornek yerel bundle bu calisma alaninda `private/kyocera/fs-1120mfp/` altina indirildi; `--kyocera-local-status`, `--kyocera-local-prepare` ve `--kyocera-local-install` kipleri bu dizini kullanir.
 - İlk kurulum ekranindaki `Kurulu sistem paketlerini guncelle` secenegi, önce `apt-get update`, sonra `apt-get upgrade -y` calistirir.
 - `Dokunmatik surucusunu guncellemeyi engelle` secenegi aciksa, genel paket guncellemesinde de `eta-touchdrv` gecici hold ile atlanir.
 - İlk kurulum sonunda ETA Kayit acilacaksa betik acilistan hemen once `eta-register` paketini kurar veya gunceller; guncelleme basarisiz olsa bile paket zaten kuruluysa mevcut surum ile devam eder.
@@ -220,6 +235,8 @@ sudo ./wine_araci.sh --remove-purge-prefixes
 ## Dokümantasyon
 
 - Ayrıntılı kullanım kılavuzu: [docs/KULLANIM_KILAVUZU.md](docs/KULLANIM_KILAVUZU.md)
+- SSS ve sorun giderme notları: [docs/SSS_SORUN_GIDERME.md](docs/SSS_SORUN_GIDERME.md)
+- Yazici rehberi ozeti: [docs/YAZICI_REHBERLERI.md](docs/YAZICI_REHBERLERI.md)
 - Katkı kuralları: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Güvenlik bildirimi: [SECURITY.md](SECURITY.md)
 - Destek akışı: [SUPPORT.md](SUPPORT.md)
@@ -233,6 +250,8 @@ Bu repo GitHub kullanımına hazır hale getirmek için aşağıdaki dosyalar ek
 - `.github/ISSUE_TEMPLATE/feature_request.yml`
 - `.github/pull_request_template.md`
 - `.github/workflows/shell-lint.yml`
+- `.github/workflows/spellcheck-lint.yml`
+- `.typos.toml`
 - `CONTRIBUTING.md`
 - `SECURITY.md`
 - `SUPPORT.md`

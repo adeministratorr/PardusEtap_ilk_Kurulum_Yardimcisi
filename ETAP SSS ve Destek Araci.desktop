@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ETAP SSS ve Destek Araci
+Comment=Yazici, dosya paylasim ve paket surucu sorunlari icin hizli kontrol araci
+Exec=/bin/sh -c "desktop_file=\$1; script_dir=\$(CDPATH= cd -- \"\$(dirname -- \"\$desktop_file\")\" && pwd); script=\"\$script_dir/sss_destek_araci.sh\"; if [ ! -x \"\$script\" ]; then printf 'HATA: Betik bulunamadi: %s\n' \"\$script\"; printf 'Pencereyi kapatmadan once Enter tusuna basin...'; read -r _; exit 1; fi; ETAP23_RUNTIME_DIR=\"\$script_dir\" exec \"\$script\" --gui" sh %k
+Icon=help-browser
+Terminal=true
+StartupNotify=true
+Categories=System;Settings;

@@ -4,6 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAIN_SCRIPT="${SCRIPT_DIR}/setup_etap23.sh"
 LAUNCHER_SCRIPT="${SCRIPT_DIR}/setup_etap23_launcher.sh"
+LAUNCHER_MODE_NAME="service-health"
 ETAP23_RUNTIME_DIR="${ETAP23_RUNTIME_DIR:-${SCRIPT_DIR}}"
 export ETAP23_RUNTIME_DIR
 
@@ -35,6 +36,11 @@ EOF
 fail() {
   printf 'HATA: %s\n' "$*" >&2
   exit 1
+}
+
+exec_launcher() {
+  [[ -x "${LAUNCHER_SCRIPT}" ]] || fail "Baslatici bulunamadi veya calistirilabilir degil: ${LAUNCHER_SCRIPT}"
+  LAUNCHER_MODE="${LAUNCHER_MODE_NAME}" exec "${LAUNCHER_SCRIPT}" "$@"
 }
 
 set_action() {
@@ -87,11 +93,10 @@ main() {
   [[ -x "${MAIN_SCRIPT}" ]] || fail "Ana betik bulunamadi veya calistirilabilir degil: ${MAIN_SCRIPT}"
 
   if ((GUI_MODE)) || { [[ -z "${ACTION_FLAG}" && ( -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ) ]]; }; then
-    [[ -x "${LAUNCHER_SCRIPT}" ]] || fail "Baslatici bulunamadi veya calistirilabilir degil: ${LAUNCHER_SCRIPT}"
     if [[ -n "${REPORT_FILE}" ]]; then
-      exec "${LAUNCHER_SCRIPT}" --service-health-gui --report-file "${REPORT_FILE}"
+      exec_launcher --service-health-gui --report-file "${REPORT_FILE}"
     fi
-    exec "${LAUNCHER_SCRIPT}" --service-health-gui
+    exec_launcher --service-health-gui
   fi
 
   [[ -n "${ACTION_FLAG}" ]] || fail "Bir islem secin veya --gui kullanin."
@@ -108,8 +113,7 @@ main() {
   fi
 
   if [[ "${EUID}" -ne 0 ]]; then
-    [[ -x "${LAUNCHER_SCRIPT}" ]] || fail "Baslatici bulunamadi veya calistirilabilir degil: ${LAUNCHER_SCRIPT}"
-    exec "${LAUNCHER_SCRIPT}" "${FORWARDED_ARGS[@]}"
+    exec_launcher "${FORWARDED_ARGS[@]}"
   fi
 
   exec "${MAIN_SCRIPT}" "${FORWARDED_ARGS[@]}"

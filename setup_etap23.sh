@@ -51,7 +51,7 @@ ENABLE_REMOVE_OGRENCI="${ENABLE_REMOVE_OGRENCI:-1}"
 ENABLE_REMOVE_OGRETMEN="${ENABLE_REMOVE_OGRETMEN:-1}"
 ENABLE_EAG_CLIENT="${ENABLE_EAG_CLIENT:-1}"
 ENABLE_ETA_QR_LOGIN="${ENABLE_ETA_QR_LOGIN:-1}"
-ENABLE_PACKAGE_UPGRADE="${ENABLE_PACKAGE_UPGRADE:-0}"
+ENABLE_PACKAGE_UPGRADE="${ENABLE_PACKAGE_UPGRADE:-1}"
 ENABLE_ETA_TOUCHDRV="${ENABLE_ETA_TOUCHDRV:-1}"
 ENABLE_WINE="${ENABLE_WINE:-1}"
 ENABLE_DISABLE_SCREENSAVER="${ENABLE_DISABLE_SCREENSAVER:-1}"
@@ -1165,6 +1165,13 @@ configure_interactive_choices() {
     ENABLE_REMOVE_OGRETMEN=0
   fi
 
+  if ask_yes_no "${ETAPADMIN_USER} parolasi degistirilsin mi?" "${ENABLE_ETAPADMIN_PASSWORD}"; then
+    ENABLE_ETAPADMIN_PASSWORD=1
+    prompt_custom_etapadmin_password
+  else
+    ENABLE_ETAPADMIN_PASSWORD=0
+  fi
+
   if ask_yes_no "e-ag-client (Ag Kontrol istemci) paketi kurulsun mu?" "${ENABLE_EAG_CLIENT}"; then
     ENABLE_EAG_CLIENT=1
   else
@@ -1177,12 +1184,6 @@ configure_interactive_choices() {
     ENABLE_ETA_QR_LOGIN=0
   fi
 
-  if ask_yes_no "Kurulu sistem paketleri guncellensin mi?" "${ENABLE_PACKAGE_UPGRADE}"; then
-    ENABLE_PACKAGE_UPGRADE=1
-  else
-    ENABLE_PACKAGE_UPGRADE=0
-  fi
-
   touchdrv_block_default=0
   if ! is_enabled "${ENABLE_ETA_TOUCHDRV}"; then
     touchdrv_block_default=1
@@ -1192,23 +1193,6 @@ configure_interactive_choices() {
     ENABLE_ETA_TOUCHDRV=0
   else
     ENABLE_ETA_TOUCHDRV=1
-  fi
-
-  if ask_yes_no "Wine kurulumu yapilsin mi?" "${ENABLE_WINE}"; then
-    ENABLE_WINE=1
-    WINE_WINDOWS_VERSION="$(ask_value "Wine icin Windows surumu" "${WINE_WINDOWS_VERSION}")"
-    WINE_PREFIX_NAME="$(ask_value "Kullanici bazli Wine klasor adi" "${WINE_PREFIX_NAME}")"
-
-    if ask_yes_no "Vulkan tabanli dxvk/vkd3d de kurulsun mu? (Eski Intel grafiklerde sorun cikarabilir.)" "${ENABLE_WINE_VULKAN_TRANSLATORS}"; then
-      ENABLE_WINE_VULKAN_TRANSLATORS=1
-      printf 'Bilgi: Vulkan tabanli ceviriciler eski Intel iGPU sistemlerde calismayabilir.\n'
-      printf 'Sorun yasarsaniz betigi tekrar --disable-wine-vulkan ile calistirabilirsiniz.\n'
-    else
-      ENABLE_WINE_VULKAN_TRANSLATORS=0
-    fi
-  else
-    ENABLE_WINE=0
-    ENABLE_WINE_VULKAN_TRANSLATORS=0
   fi
 
   if ask_yes_no "Ekran koruyucu, ekran karartma ve DPMS kapatilsin mi?" "${ENABLE_DISABLE_SCREENSAVER}"; then
@@ -1243,13 +1227,6 @@ configure_interactive_choices() {
     ENABLE_SCHEDULED_SHUTDOWN=0
   fi
 
-  if ask_yes_no "${ETAPADMIN_USER} parolasi degistirilsin mi?" "${ENABLE_ETAPADMIN_PASSWORD}"; then
-    ENABLE_ETAPADMIN_PASSWORD=1
-    prompt_custom_etapadmin_password
-  else
-    ENABLE_ETAPADMIN_PASSWORD=0
-  fi
-
   if ask_yes_no "Kurulum sonunda ETA Kayit uygulamasi acilsin mi?" "${ENABLE_OPEN_ETA_KAYIT}"; then
     ENABLE_OPEN_ETA_KAYIT=1
     while true; do
@@ -1266,6 +1243,29 @@ configure_interactive_choices() {
     printf 'Bilgi: ETA Kayit icin tahta internete bagli olmali ve kayit sirasinda yonetici yetkili sifre gerekebilir.\n'
   else
     ENABLE_OPEN_ETA_KAYIT=0
+  fi
+
+  if ask_yes_no "Wine kurulumu yapilsin mi?" "${ENABLE_WINE}"; then
+    ENABLE_WINE=1
+    WINE_WINDOWS_VERSION="$(ask_value "Wine icin Windows surumu" "${WINE_WINDOWS_VERSION}")"
+    WINE_PREFIX_NAME="$(ask_value "Kullanici bazli Wine klasor adi" "${WINE_PREFIX_NAME}")"
+
+    if ask_yes_no "Vulkan tabanli dxvk/vkd3d de kurulsun mu? (Eski Intel grafiklerde sorun cikarabilir.)" "${ENABLE_WINE_VULKAN_TRANSLATORS}"; then
+      ENABLE_WINE_VULKAN_TRANSLATORS=1
+      printf 'Bilgi: Vulkan tabanli ceviriciler eski Intel iGPU sistemlerde calismayabilir.\n'
+      printf 'Sorun yasarsaniz betigi tekrar --disable-wine-vulkan ile calistirabilirsiniz.\n'
+    else
+      ENABLE_WINE_VULKAN_TRANSLATORS=0
+    fi
+  else
+    ENABLE_WINE=0
+    ENABLE_WINE_VULKAN_TRANSLATORS=0
+  fi
+
+  if ask_yes_no "Kurulu sistem paketleri guncellensin mi?" "${ENABLE_PACKAGE_UPGRADE}"; then
+    ENABLE_PACKAGE_UPGRADE=1
+  else
+    ENABLE_PACKAGE_UPGRADE=0
   fi
 
   printf '\nSecimler alindi. Kurulum baslatiliyor.\n\n'
@@ -1940,6 +1940,12 @@ find_eta_kayit_command() {
       return 0
     fi
   done
+
+  if candidate="$(command -v -- "${ETA_KAYIT_PACKAGE}" 2>/dev/null)"; then
+    [[ -n "${candidate}" ]] || return 1
+    printf '%s\n' "${candidate}"
+    return 0
+  fi
 
   return 1
 }
@@ -2749,6 +2755,16 @@ def find_first(root, matcher):
     return None
 
 
+def find_labeled_entry(root, terms):
+    return find_first(
+        root,
+        lambda node: has_editable_text(node)
+        and is_enabled(node)
+        and is_visible(node)
+        and node_matches(node, terms),
+    )
+
+
 def find_button(root, terms):
     return find_first(
         root,
@@ -2945,6 +2961,225 @@ def root_contains_terms_across_roots(root, terms):
         if root_contains_terms(candidate_root, terms):
             return True
     return False
+
+
+def find_save_button_across_roots(root):
+    for terms in (SAVE_BOARD_TERMS, SAVE_TERMS):
+        button, owner_root = find_button_across_roots(root, terms)
+        if button is not None:
+            return button, owner_root, terms
+    return None, None, None
+
+
+def find_current_class_entry(root, previous_entry=None, previous_value=""):
+    for candidate_root in related_roots(root):
+        candidates = editable_entries(candidate_root)
+        labeled_candidates = [node for node in candidates if node_matches(node, CLASS_TERMS)]
+
+        if labeled_candidates:
+            class_entry = choose_best_class_entry(labeled_candidates, previous_entry, previous_value)
+            if class_entry is not None:
+                return class_entry, candidate_root
+
+        if len(candidates) >= 2:
+            class_entry = choose_best_class_entry(candidates, previous_entry, previous_value)
+            if class_entry is not None:
+                return class_entry, candidate_root
+
+    return None, None
+
+
+def success_screen_is_active(root):
+    if not root_contains_terms_across_roots(root, SUCCESS_TERMS):
+        return False
+
+    apply_button, _apply_root = find_button_across_roots(root, APPLY_TERMS)
+    save_button, _save_root, _save_terms = find_save_button_across_roots(root)
+    check_button, _check_root = find_button_across_roots(root, CHECK_CODE_TERMS)
+    if apply_button is not None or save_button is not None or check_button is not None:
+        return False
+
+    for candidate_root in related_roots(root):
+        if editable_entries(candidate_root):
+            return False
+
+    return True
+
+
+def detect_initial_window_state(root, kurum_kodu):
+    school_entry = find_labeled_entry(root, ENTRY_TERMS)
+    school_entry_value = normalize(read_text(school_entry)) if school_entry is not None else ""
+    class_entry, class_root = find_current_class_entry(root, school_entry, school_entry_value)
+    check_button, check_root = find_button_across_roots(root, CHECK_CODE_TERMS)
+    save_button, save_root, save_terms = find_save_button_across_roots(root)
+    apply_button, apply_root = find_button_across_roots(root, APPLY_TERMS)
+    candidates = editable_entries(root)
+    entry_hint_visible = root_contains_terms_across_roots(root, ENTRY_TERMS)
+    class_hint_visible = root_contains_terms_across_roots(root, CLASS_TERMS)
+    radio_hint_visible = root_contains_terms_across_roots(root, RADIO_TERMS)
+
+    if success_screen_is_active(root):
+        return {
+            "state": "done",
+            "school_entry": school_entry,
+            "class_entry": class_entry,
+            "save_root": save_root,
+            "save_terms": save_terms,
+            "apply_root": apply_root,
+            "check_root": check_root,
+        }
+
+    if apply_button is not None or root_contains_terms_across_roots(root, CONFIRM_TERMS):
+        return {
+            "state": "apply",
+            "school_entry": school_entry,
+            "class_entry": class_entry,
+            "save_root": save_root,
+            "save_terms": save_terms,
+            "apply_root": apply_root,
+            "check_root": check_root,
+        }
+
+    if class_entry is not None and save_button is not None:
+        return {
+            "state": "class",
+            "school_entry": school_entry,
+            "class_entry": class_entry,
+            "save_root": save_root,
+            "save_terms": save_terms,
+            "apply_root": apply_root,
+            "check_root": check_root,
+            "class_root": class_root,
+        }
+
+    if school_entry is not None:
+        return {
+            "state": "school",
+            "school_entry": school_entry,
+            "class_entry": class_entry,
+            "save_root": save_root,
+            "save_terms": save_terms,
+            "apply_root": apply_root,
+            "check_root": check_root,
+        }
+
+    if len(candidates) == 1 and check_button is not None:
+        return {
+            "state": "school",
+            "school_entry": candidates[0],
+            "class_entry": class_entry,
+            "save_root": save_root,
+            "save_terms": save_terms,
+            "apply_root": apply_root,
+            "check_root": check_root,
+        }
+
+    if len(candidates) == 1 and save_button is not None:
+        current_value = normalize(read_text(candidates[0]))
+        if class_hint_visible and not entry_hint_visible:
+            return {
+                "state": "class",
+                "school_entry": school_entry,
+                "class_entry": candidates[0],
+                "save_root": save_root,
+                "save_terms": save_terms,
+                "apply_root": apply_root,
+                "check_root": check_root,
+                "class_root": root,
+            }
+
+        if entry_hint_visible or radio_hint_visible:
+            return {
+                "state": "school",
+                "school_entry": candidates[0],
+                "class_entry": class_entry,
+                "save_root": save_root,
+                "save_terms": save_terms,
+                "apply_root": apply_root,
+                "check_root": check_root,
+            }
+
+        if current_value and (current_value == normalize(kurum_kodu) or current_value.isdigit()):
+            return {
+                "state": "school",
+                "school_entry": candidates[0],
+                "class_entry": class_entry,
+                "save_root": save_root,
+                "save_terms": save_terms,
+                "apply_root": apply_root,
+                "check_root": check_root,
+            }
+
+    return {
+        "state": "unknown",
+        "school_entry": school_entry,
+        "class_entry": class_entry,
+        "save_root": save_root,
+        "save_terms": save_terms,
+        "apply_root": apply_root,
+        "check_root": check_root,
+    }
+
+
+def window_state_debug(root, state_info):
+    state = state_info.get("state", "unknown")
+    school_entry = state_info.get("school_entry")
+    class_entry = state_info.get("class_entry")
+    _save_button, save_root, save_terms = find_save_button_across_roots(root)
+    apply_button, apply_root = find_button_across_roots(root, APPLY_TERMS)
+    check_button, check_root = find_button_across_roots(root, CHECK_CODE_TERMS)
+    return (
+        f"state={state!r} "
+        f"school_entry={describe_node(school_entry)} "
+        f"class_entry={describe_node(class_entry)} "
+        f"save_terms={save_terms!r} "
+        f"save_root={describe_node(save_root)} "
+        f"apply_button={describe_node(apply_button)} "
+        f"apply_root={describe_node(apply_root)} "
+        f"check_button={describe_node(check_button)} "
+        f"check_root={describe_node(check_root)}"
+    )
+
+
+def complete_class_step(root, class_entry, sinif, save_terms, button_root=None):
+    search_root = button_root if button_root is not None else root
+
+    if not fill_entry(class_entry, sinif):
+        print("ETA Kayit icinde sinif bilgisi beklenen sekilde yazilamadi.", file=sys.stderr)
+        return 1
+    debug(f"Sinif alani dolduruldu: {describe_node(class_entry)}")
+
+    if save_terms is None:
+        print("Sinif icin kaydet dugmesi bulunamadi.", file=sys.stderr)
+        return 1
+
+    post_save_state = activate_button_until(
+        search_root,
+        save_terms,
+        20,
+        lambda: detect_post_save_state(root, class_entry),
+        attempts=5,
+        use_mouse_fallback=False,
+        use_key_fallback=True,
+    )
+    if post_save_state is None:
+        print(
+            "Sinif kaydi icin kaydet dugmesine basilamadi. "
+            f"Kaydet dugmesi: {button_debug(search_root, save_terms)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if post_save_state == "apply" and not activate_apply_if_present(root):
+        print(
+            "Kaydet sonrasi Uygula dugmesine basilamadi. "
+            f"Uygula dugmesi: {button_debug_across_roots(root, APPLY_TERMS)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    print("ETA Kayit sinif bilgisi tamamlanip kaydet ve uygula eylemleri tetiklendi.")
+    return 0
 
 
 def detect_post_save_state(root, class_entry):
@@ -3246,10 +3481,48 @@ def main():
         return 1
     debug(f"ETA penceresi bulundu: {describe_node(window)}")
 
+    state_info = detect_initial_window_state(window, kurum_kodu)
+    debug(f"ETA pencere durumu: {window_state_debug(window, state_info)}")
+
+    if state_info["state"] == "done":
+        print("ETA Kayit uygulamasi bu tahtanin zaten kayitli oldugunu gosteriyor.")
+        return 0
+
+    if state_info["state"] == "apply":
+        if activate_apply_if_present(window):
+            print("ETA Kayit onay ekrani acik bulundu; Uygula eylemi tetiklendi.")
+            return 0
+
+        print(
+            "ETA Kayit onay ekrani bulundu ancak Uygula dugmesi tetiklenemedi. "
+            f"Uygula dugmesi: {button_debug_across_roots(window, APPLY_TERMS)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if state_info["state"] == "class":
+        return complete_class_step(
+            window,
+            state_info["class_entry"],
+            sinif,
+            state_info.get("save_terms"),
+            button_root=state_info.get("save_root"),
+        )
+
+    if state_info["state"] == "unknown":
+        print(
+            "ETA Kayit penceresi bulundu ancak acik ekran taninamadi. "
+            "Formu ilk kayit adimina getirip tekrar deneyin.",
+            file=sys.stderr,
+        )
+        return 1
+
     choose_school_code_mode(window)
     time.sleep(1)
 
-    entry = find_entry(window)
+    entry = state_info.get("school_entry")
+    if entry is None:
+        entry = find_labeled_entry(window, ENTRY_TERMS) or find_entry(window)
     if entry is None:
         print("ETA Kayit icinde kurum kodu giris alani bulunamadi.", file=sys.stderr)
         return 1
@@ -3278,43 +3551,7 @@ def main():
             )
             return 1
 
-        if not fill_entry(class_entry, sinif):
-            print("ETA Kayit icinde sinif bilgisi beklenen sekilde yazilamadi.", file=sys.stderr)
-            return 1
-        debug(f"Sinif alani dolduruldu: {describe_node(class_entry)}")
-
-        save_button = wait_for_button(window, SAVE_BOARD_TERMS, 20)
-        if save_button is None:
-            print("Sinif icin kaydet dugmesi bulunamadi.", file=sys.stderr)
-            return 1
-
-        post_save_state = activate_button_until(
-            window,
-            SAVE_BOARD_TERMS,
-            20,
-            lambda: detect_post_save_state(window, class_entry),
-            attempts=5,
-            use_mouse_fallback=False,
-            use_key_fallback=True,
-        )
-        if post_save_state is None:
-            print(
-                "Sinif kaydi icin kaydet dugmesine basilamadi. "
-                f"Kaydet dugmesi: {button_debug(window, SAVE_BOARD_TERMS)}",
-                file=sys.stderr,
-            )
-            return 1
-
-        if post_save_state == "apply" and not activate_apply_if_present(window):
-            print(
-                "Kaydet sonrasi Uygula dugmesine basilamadi. "
-                f"Uygula dugmesi: {button_debug_across_roots(window, APPLY_TERMS)}",
-                file=sys.stderr,
-            )
-            return 1
-
-        print("ETA Kayit okul kodu kontrol edilip sinif bilgisi dolduruldu; kaydet ve uygula eylemleri tetiklendi.")
-        return 0
+        return complete_class_step(window, class_entry, sinif, SAVE_BOARD_TERMS)
 
     save_button = wait_for_button(window, SAVE_TERMS, 15)
 
@@ -3340,44 +3577,7 @@ def main():
         )
         return 1
 
-    if not fill_entry(class_entry, sinif):
-        print("ETA Kayit icinde sinif bilgisi beklenen sekilde yazilamadi.", file=sys.stderr)
-        return 1
-    debug(f"Sinif alani dolduruldu: {describe_node(class_entry)}")
-
-    save_button = wait_for_button(window, SAVE_TERMS, 20)
-
-    if save_button is None:
-        print("Sinif icin kaydet dugmesi bulunamadi.", file=sys.stderr)
-        return 1
-
-    post_save_state = activate_button_until(
-        window,
-        SAVE_TERMS,
-        20,
-        lambda: detect_post_save_state(window, class_entry),
-        attempts=5,
-        use_mouse_fallback=False,
-        use_key_fallback=True,
-    )
-    if post_save_state is None:
-        print(
-            "Sinif kaydi icin kaydet dugmesine basilamadi. "
-            f"Kaydet dugmesi: {button_debug(window, SAVE_TERMS)}",
-            file=sys.stderr,
-        )
-        return 1
-
-    if post_save_state == "apply" and not activate_apply_if_present(window):
-        print(
-            "Kaydet sonrasi Uygula dugmesine basilamadi. "
-            f"Uygula dugmesi: {button_debug_across_roots(window, APPLY_TERMS)}",
-            file=sys.stderr,
-        )
-        return 1
-
-    print("ETA Kayit kurum kodu ve sinif bilgisi doldurulup kaydet ve uygula eylemleri tetiklendi.")
-    return 0
+    return complete_class_step(window, class_entry, sinif, SAVE_TERMS)
 
 
 if __name__ == "__main__":
@@ -3407,21 +3607,26 @@ open_eta_kayit_if_available() {
     return 0
   fi
 
-  if package_installed "${ETA_KAYIT_PACKAGE}"; then
-    if eta_command="$(find_eta_kayit_command)"; then
-      launch_command=("${eta_command}")
-    elif command -v gtk-launch >/dev/null 2>&1 && [[ -n "${ETA_KAYIT_DESKTOP_ID}" ]]; then
-      launch_command=(gtk-launch "${ETA_KAYIT_DESKTOP_ID}")
-    elif command -v gtk-launch >/dev/null 2>&1; then
-      launch_command=(gtk-launch "${ETA_KAYIT_PACKAGE}")
-    fi
-  fi
+  desktop_file="$(find_eta_kayit_desktop_file || true)"
+  eta_command="$(find_eta_kayit_command || true)"
 
-  if ((${#launch_command[@]} == 0)) && desktop_file="$(find_eta_kayit_desktop_file)"; then
+  if [[ -n "${desktop_file}" ]]; then
     if command -v gio >/dev/null 2>&1; then
       launch_command=(gio launch "${desktop_file}")
     elif command -v gtk-launch >/dev/null 2>&1; then
       launch_command=(gtk-launch "$(basename "${desktop_file}" .desktop)")
+    fi
+  fi
+
+  if ((${#launch_command[@]} == 0)) && [[ -n "${eta_command}" ]]; then
+    launch_command=("${eta_command}")
+  fi
+
+  if ((${#launch_command[@]} == 0)) && package_installed "${ETA_KAYIT_PACKAGE}"; then
+    if command -v gtk-launch >/dev/null 2>&1 && [[ -n "${ETA_KAYIT_DESKTOP_ID}" ]]; then
+      launch_command=(gtk-launch "${ETA_KAYIT_DESKTOP_ID}")
+    elif command -v gtk-launch >/dev/null 2>&1; then
+      launch_command=(gtk-launch "${ETA_KAYIT_PACKAGE}")
     fi
   fi
 
@@ -6145,8 +6350,17 @@ show_wine_diagnostic_report() {
     log "winetricks komutu bulunamadi."
   fi
 
-  [[ -x "${system_wineboot_bin}" ]] && log "wineboot komutu hazir: ${system_wineboot_bin}" || log "wineboot komutu bulunamadi."
-  [[ -x "${system_wineserver_bin}" ]] && log "wineserver komutu hazir: ${system_wineserver_bin}" || log "wineserver komutu bulunamadi."
+  if [[ -x "${system_wineboot_bin}" ]]; then
+    log "wineboot komutu hazir: ${system_wineboot_bin}"
+  else
+    log "wineboot komutu bulunamadi."
+  fi
+
+  if [[ -x "${system_wineserver_bin}" ]]; then
+    log "wineserver komutu hazir: ${system_wineserver_bin}"
+  else
+    log "wineserver komutu bulunamadi."
+  fi
 
   for package_name in wine wine64 wine32:i386 winetricks cabextract p7zip-full mono-complete xvfb xauth; do
     if package_installed "${package_name}"; then
@@ -6533,12 +6747,12 @@ start_idle_shutdown_monitor_for_active_session() {
   [[ -x "${helper}" ]] || return 0
 
   if ! command -v xprintidle >/dev/null 2>&1; then
-    log "xprintidle su an bulunamadigi icin bosda kapanma izleyicisi bu oturumda hemen baslatilamadi."
+    log "xprintidle su an bulunamadigi icin bosta kapanma izleyicisi bu oturumda hemen baslatilamadi."
     return 0
   fi
 
   if ! find_active_graphical_session; then
-    log "Aktif grafik oturumu bulunamadigi icin bosda kapanma izleyicisi simdi baslatilamadi. Sonraki oturumda otomatik devreye girecek."
+    log "Aktif grafik oturumu bulunamadigi icin bosta kapanma izleyicisi simdi baslatilamadi. Sonraki oturumda otomatik devreye girecek."
     return 0
   fi
 
@@ -7384,6 +7598,10 @@ main() {
     run_step "ogretmen kullanicisini silme" remove_user_if_present ogretmen
   fi
 
+  if is_enabled "${ENABLE_ETAPADMIN_PASSWORD}"; then
+    run_step "${ETAPADMIN_USER} parolasini degistirme" set_etapadmin_password
+  fi
+
   if is_enabled "${ENABLE_HOSTNAME_CHANGE}"; then
     run_step "tahta adini degistirme" set_board_hostname
   fi
@@ -7411,12 +7629,8 @@ main() {
   run_step "yardimci dosyalari hazirlama" install_launcher_dependencies
   run_step "gerekli paket onkosullarini kurma" install_deferred_runtime_packages
 
-  if is_enabled "${ENABLE_PACKAGE_UPGRADE}"; then
-    run_step "kurulu paketleri guncelleme" upgrade_installed_packages
-  fi
-
   if is_enabled "${ENABLE_IDLE_SHUTDOWN}"; then
-    run_step "bosda kapanma oturum izleyicisini baslatma" start_idle_shutdown_monitor_for_active_session
+    run_step "bosta kapanma oturum izleyicisini baslatma" start_idle_shutdown_monitor_for_active_session
   fi
 
   if is_enabled "${ENABLE_EAG_CLIENT}"; then
@@ -7431,12 +7645,12 @@ main() {
     run_step "eta-touchdrv paketini kurma veya guncelleme" install_or_upgrade_eta_touchdrv
   fi
 
-  if is_enabled "${ENABLE_ETAPADMIN_PASSWORD}"; then
-    run_step "${ETAPADMIN_USER} parolasini degistirme" set_etapadmin_password
-  fi
-
   if is_enabled "${ENABLE_WINE}"; then
     run_step "Wine ve winetricks kurulumunu yapma" install_and_configure_wine
+  fi
+
+  if is_enabled "${ENABLE_PACKAGE_UPGRADE}"; then
+    run_step "kurulu paketleri guncelleme" upgrade_installed_packages
   fi
 
   run_step "kurulum sonu kontrollerini calistirma" run_post_install_checks

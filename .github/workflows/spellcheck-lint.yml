@@ -1,0 +1,33 @@
+name: Spellcheck Lint
+
+on:
+  push:
+    paths:
+      - "*.sh"
+      - "*.desktop"
+      - "README.md"
+      - "docs/**"
+      - ".github/**"
+      - ".typos.toml"
+  pull_request:
+    paths:
+      - "*.sh"
+      - "*.desktop"
+      - "README.md"
+      - "docs/**"
+      - ".github/**"
+      - ".typos.toml"
+
+jobs:
+  typos:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run typo check
+        uses: crate-ci/typos@v1
+        with:
+          files: .
+          config: ./.typos.toml

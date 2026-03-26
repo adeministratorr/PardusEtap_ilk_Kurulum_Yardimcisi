@@ -4,6 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAIN_SCRIPT="${SCRIPT_DIR}/setup_etap23.sh"
 LAUNCHER_SCRIPT="${SCRIPT_DIR}/setup_etap23_launcher.sh"
+LAUNCHER_MODE_NAME="eta-kayit-repair"
 ETAP23_RUNTIME_DIR="${ETAP23_RUNTIME_DIR:-${SCRIPT_DIR}}"
 export ETAP23_RUNTIME_DIR
 
@@ -40,6 +41,11 @@ EOF
 fail() {
   printf 'HATA: %s\n' "$*" >&2
   exit 1
+}
+
+exec_launcher() {
+  [[ -x "${LAUNCHER_SCRIPT}" ]] || fail "Baslatici bulunamadi veya calistirilabilir degil: ${LAUNCHER_SCRIPT}"
+  LAUNCHER_MODE="${LAUNCHER_MODE_NAME}" exec "${LAUNCHER_SCRIPT}" "$@"
 }
 
 parse_args() {
@@ -84,17 +90,16 @@ main() {
   [[ -x "${MAIN_SCRIPT}" ]] || fail "Ana betik bulunamadi veya calistirilabilir degil: ${MAIN_SCRIPT}"
 
   if ((GUI_MODE)); then
-    [[ -x "${LAUNCHER_SCRIPT}" ]] || fail "Baslatici bulunamadi veya calistirilabilir degil: ${LAUNCHER_SCRIPT}"
     if ((PREFLIGHT)); then
       if [[ -n "${REPORT_FILE}" ]]; then
-        exec "${LAUNCHER_SCRIPT}" --eta-kayit-repair-gui --eta-kayit-preflight --report-file "${REPORT_FILE}"
+        exec_launcher --eta-kayit-repair-gui --eta-kayit-preflight --report-file "${REPORT_FILE}"
       fi
-      exec "${LAUNCHER_SCRIPT}" --eta-kayit-repair-gui --eta-kayit-preflight
+      exec_launcher --eta-kayit-repair-gui --eta-kayit-preflight
     fi
     if [[ -n "${REPORT_FILE}" ]]; then
-      exec "${LAUNCHER_SCRIPT}" --eta-kayit-repair-gui --report-file "${REPORT_FILE}"
+      exec_launcher --eta-kayit-repair-gui --report-file "${REPORT_FILE}"
     fi
-    exec "${LAUNCHER_SCRIPT}" --eta-kayit-repair-gui
+    exec_launcher --eta-kayit-repair-gui
   fi
 
   if ((SKIP_APT_UPDATE)); then
@@ -116,8 +121,7 @@ main() {
   fi
 
   if [[ "${EUID}" -ne 0 ]]; then
-    [[ -x "${LAUNCHER_SCRIPT}" ]] || fail "Baslatici bulunamadi veya calistirilabilir degil: ${LAUNCHER_SCRIPT}"
-    exec "${LAUNCHER_SCRIPT}" "${forwarded_args[@]}"
+    exec_launcher "${forwarded_args[@]}"
   fi
 
   exec "${MAIN_SCRIPT}" "${forwarded_args[@]}"
