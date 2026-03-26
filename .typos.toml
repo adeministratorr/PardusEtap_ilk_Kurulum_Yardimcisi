@@ -4,3 +4,9 @@ extend-exclude = [
   "*.deb",
   "*.tar.gz",
 ]
+
+[default.extend-words]
+# Allow common Turkish words used in localized help and runtime output.
+parametre = "parametre"
+sistem = "sistem"
+Sistem = "Sistem"
