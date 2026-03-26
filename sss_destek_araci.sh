@@ -500,16 +500,32 @@ run_kyocera_local_status() {
 
   report_section "Hazirlanan yerel yollar"
   universal_tar="$(kyocera_bundle_universal_tar_path)"
-  [[ -n "${universal_tar}" ]] && report_ok "Universal tar bulundu: ${universal_tar}" || report_info "Universal tar henuz hazir degil."
+  if [[ -n "${universal_tar}" ]]; then
+    report_ok "Universal tar bulundu: ${universal_tar}"
+  else
+    report_info "Universal tar henuz hazir degil."
+  fi
 
   kyodialog_deb="$(kyocera_bundle_kyodialog_deb_path)"
-  [[ -n "${kyodialog_deb}" ]] && report_ok "kyodialog deb bulundu: ${kyodialog_deb}" || report_info "kyodialog deb henuz hazir degil."
+  if [[ -n "${kyodialog_deb}" ]]; then
+    report_ok "kyodialog deb bulundu: ${kyodialog_deb}"
+  else
+    report_info "kyodialog deb henuz hazir degil."
+  fi
 
   model_tar="$(kyocera_bundle_model_turkish_tar_path)"
-  [[ -n "${model_tar}" ]] && report_ok "Model turkish tar bulundu: ${model_tar}" || report_info "Model turkish tar henuz hazir degil."
+  if [[ -n "${model_tar}" ]]; then
+    report_ok "Model turkish tar bulundu: ${model_tar}"
+  else
+    report_info "Model turkish tar henuz hazir degil."
+  fi
 
   install_script="$(kyocera_bundle_install_script_path)"
-  [[ -n "${install_script}" ]] && report_ok "Install betigi bulundu: ${install_script}" || report_info "Install betigi henuz hazir degil."
+  if [[ -n "${install_script}" ]]; then
+    report_ok "Install betigi bulundu: ${install_script}"
+  else
+    report_info "Install betigi henuz hazir degil."
+  fi
 
   ppd_dir="$(kyocera_bundle_ppd_dir_path)"
   if [[ -n "${ppd_dir}" ]]; then
