@@ -10,3 +10,7 @@ extend-exclude = [
 parametre = "parametre"
 sistem = "sistem"
 Sistem = "Sistem"
+paket = "paket"
+Paket = "Paket"
+matris = "matris"
+standart = "standart"
